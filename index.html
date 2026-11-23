@@ -1,68 +1,32 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="pt-BR">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ADM-ESTUDO v1.1 — Administração + Direito Administrativo</title>
-<link rel="stylesheet" href="style.css">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#25365a">
+  <meta name="description" content="Estude para concursos públicos em um só lugar, com disciplinas e progresso organizados.">
+  <title>ESTUDO-CONCURSOS — Minha preparação</title>
+  <link rel="stylesheet" href="./site/css/app.css">
 </head>
 <body>
-  <div id="app">
-    <header class="app-header">
-      <button class="menu-toggle" data-action="toggle-sidebar" aria-label="Abrir menu">☰</button>
-      <div class="brand">
-        <span id="brandName">ADM-ESTUDO</span>
-        <span class="brand-sub" id="brandSubtitle">Administração + Direito Administrativo</span>
-      </div>
-      <div class="header-spacer"></div>
-      <span class="version-badge" id="appVersionBadge">v1.1</span>
+  <a class="skip-link" href="#content">Pular para conteúdo</a>
+  <div class="shell">
+    <header class="topbar">
+      <a class="brand" href="#inicio" aria-label="ESTUDO-CONCURSOS — início">
+        <span class="brand-symbol" aria-hidden="true">✦</span>
+        <span>ESTUDO<span class="brand-accent">CONCURSOS</span></span>
+      </a>
+      <nav class="topnav" aria-label="Navegação principal">
+        <a href="#inicio" id="nav-inicio">Início</a>
+        <a href="#disciplinas" id="nav-disciplinas">Disciplinas</a>
+      </nav>
+      <button id="theme-toggle" class="theme-button" type="button" aria-label="Alternar tema" title="Alternar modo claro ou escuro">☾</button>
     </header>
-
-    <aside class="sidebar" id="sidebar">
-      <div class="nav-section-title">Estudo</div>
-      <button class="nav-item" data-nav="dashboard"><span class="nav-icon">🏠</span><span>Dashboard</span></button>
-      <button class="nav-item" data-nav="modulos"><span class="nav-icon">📚</span><span>Módulos</span></button>
-      <button class="nav-item" data-nav="questoes"><span class="nav-icon">📝</span><span>Questões</span></button>
-      <button class="nav-item" data-nav="banco-questoes"><span class="nav-icon">🗄️</span><span>Banco de Questões</span></button>
-      <button class="nav-item" data-nav="flashcards"><span class="nav-icon">🗂️</span><span>Flashcards</span></button>
-
-      <div class="nav-section-title">Revisão</div>
-      <button class="nav-item" data-nav="revisao"><span class="nav-icon">🔁</span><span>Revisão</span><span class="nav-badge" id="navBadgeRevisao" style="display:none;"></span></button>
-      <button class="nav-item" data-nav="erros"><span class="nav-icon">❌</span><span>Meus Erros</span><span class="nav-badge" id="navBadgeErros" style="display:none;"></span></button>
-
-      <div class="nav-section-title">Simulados</div>
-      <button class="nav-item" data-nav="simulados"><span class="nav-icon">🎯</span><span>Simulados</span></button>
-
-      <div class="nav-section-title">Progresso</div>
-      <button class="nav-item" data-nav="estatisticas"><span class="nav-icon">📊</span><span>Estatísticas</span></button>
-
-      <div class="nav-section-title">Sistema</div>
-      <button class="nav-item" data-nav="configuracoes"><span class="nav-icon">⚙️</span><span>Configurações</span></button>
-      <button class="nav-item" data-nav="sobre"><span class="nav-icon">ℹ️</span><span>Sobre</span></button>
-    </aside>
-
-    <main class="main" id="main"></main>
+    <main id="content" tabindex="-1" aria-live="polite">
+      <div class="loading">Carregando o painel de estudos…</div>
+    </main>
+    <footer class="footer">ESTUDO-CONCURSOS · Base unificada em desenvolvimento · Dados de estudo preservados no navegador</footer>
   </div>
-
-  <!-- Configuração — deve vir PRIMEIRO -->
-  <script src="config.js"></script>
-
-  <!-- Conteúdo base -->
-  <script src="content/modules.js"></script>
-  <script src="content/lessons-alta.js"></script>
-  <script src="content/lessons-media.js"></script>
-  <script src="content/lessons-complementar.js"></script>
-  <script src="content/diagnostics-alta.js"></script>
-  <script src="content/diagnostics-media.js"></script>
-  <script src="content/diagnostics-complementar.js"></script>
-  <script src="content/questions.js"></script>
-  <script src="content/flashcards.js"></script>
-
-  <!-- Melhorias pedagógicas (R1) -->
-  <script src="content/exercises.js"></script>
-  <script src="content/exemplos-ineditos.js"></script>
-
-  <!-- Motor — deve vir por ÚLTIMO -->
-  <script src="app.js"></script>
+  <script type="module" src="./site/js/unificado/app.js"></script>
 </body>
 </html>

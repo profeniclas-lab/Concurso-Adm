@@ -82,3 +82,7 @@ site/js/unificado/content/portugues/POR-01/flashcards.js
 - O GitHub Pages é hospedagem estática, não um mecanismo de sincronização de progresso entre dispositivos.
 - `localStorage` é isolado por origem, não por caminho. O estado do ADMIN incorporado pode ser compartilhado com `https://profeniclas-lab.github.io/Dir-Adm/`, pois ambos estão sob a mesma origem GitHub Pages. O shell não altera essa chave.
 - Integração futura deverá validar e migrar o armazenamento com backup, sem reset e sem importação automática de estados legados.
+
+## CORREÇÃO FASE 2.1 — Um index.html também na raiz
+
+Se você estiver vendo o aplicativo antigo, leia primeiro [docs/CORRECAO-PUBLICACAO.md](docs/CORRECAO-PUBLICACAO.md). O `index.html` do diretório **raiz** agora abre o portal diretamente, mesmo quando o Pages está configurado para publicar a branch `main` sem GitHub Actions. A implantação via Actions continua funcionando com `site/index.html` e cópia do ADM-ESTUDO.
