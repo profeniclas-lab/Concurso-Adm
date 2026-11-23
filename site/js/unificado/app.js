@@ -48,6 +48,7 @@ async function renderAdmin(subject,token){
   main.innerHTML=`${crumb([{text:'Início',href:'inicio'},{text:subject.shortTitle}])}
     <div class="section-head"><div><p class="eyebrow">Matéria disponível</p><h2>${esc(subject.title)}</h2></div><a class="btn" href="#inicio">← Voltar ao painel</a></div>
     ${local?`<p class="notice">Integração de transição: o ADM-ESTUDO original está incorporado abaixo, sem alterações nas suas aulas, questões ou regras de progresso.</p>
+    <p><a class="btn btn-primary" href="./administracao/index.html" target="_blank" rel="noopener noreferrer">Abrir Administração em tela cheia ↗</a></p>
     <iframe id="admin-frame" class="admin-frame" title="Aplicativo ADM-ESTUDO — Administração e Direito Administrativo" src="./administracao/index.html" loading="eager" referrerpolicy="same-origin"></iframe>`:
     `<div class="panel"><h3>Administração já está disponível</h3><p>Esta cópia de teste não inclui os arquivos administrativos. Na publicação pelo GitHub Actions, a versão preservada de <code>Dir-Adm/nova-arquitetura</code> será incorporada automaticamente.</p>
     <p>Enquanto isso, você pode estudar no aplicativo original:</p><a class="btn btn-primary" href="https://profeniclas-lab.github.io/Dir-Adm/" target="_blank" rel="noopener noreferrer">Abrir ADM-ESTUDO original ↗</a></div>`}`;

@@ -5,6 +5,10 @@ rm -rf dist
 mkdir -p dist
 cp -a site/. dist/
 printf '\n' > dist/.nojekyll
+if ! grep -q 'ESTUDO-CONCURSOS' dist/index.html; then
+  echo 'ERRO: a entrada do portal unificado não foi encontrada.' >&2
+  exit 1
+fi
 
 # O pacote estático de Administração é cópia EXATA do repositório-fonte.
 # A cópia é montada APENAS no dist/ do CI, nunca sobre os arquivos de origem.
@@ -24,6 +28,7 @@ else
     "https://codeload.github.com/profeniclas-lab/Dir-Adm/zip/${ADMIN_SHA}" \
     --output "$TMPDIR_BUILD/admin.zip"
 fi
+unzip -tqq "$TMPDIR_BUILD/admin.zip"
 unzip -q "$TMPDIR_BUILD/admin.zip" -d "$TMPDIR_BUILD/source"
 SOURCE_DIR=$(find "$TMPDIR_BUILD/source" -mindepth 1 -maxdepth 1 -type d -print -quit)
 if [[ -z "$SOURCE_DIR" ]]; then echo 'ERRO: zip de Administração sem arquivos.' >&2; exit 1; fi
@@ -35,5 +40,9 @@ for file in index.html js/app.js js/start-f25-lote04.js js/data/questions.js js/
     exit 1
   fi
 done
+if ! diff -qr "$SOURCE_DIR" dist/administracao >/dev/null; then
+  echo 'ERRO: a cópia administrativa não corresponde exatamente à origem.' >&2
+  exit 1
+fi
 printf 'fonte=profeniclas-lab/Dir-Adm\nbranch=nova-arquitetura\ncommit=%s\n' "$ADMIN_SHA" > dist/administracao/FONTE-INTEGRACAO.txt
 echo "Build completo (Administração incorporada no commit ${ADMIN_SHA})."
