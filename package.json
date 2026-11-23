@@ -1,0 +1,12 @@
+{
+  "name": "estudo-concursos",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "description": "Portal unificado e carregador de conteúdo por módulo, sem dependências externas",
+  "scripts": {
+    "test": "node --test tests/*.test.mjs",
+    "build": "bash scripts/build-site.sh",
+    "build:quick": "ESTUDO_SKIP_ADMIN=1 bash scripts/build-site.sh"
+  }
+}
