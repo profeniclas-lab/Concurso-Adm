@@ -1,4 +1,5 @@
 import {listSubjects,getSubject} from './subjects.js';
+import {loadAdminCatalog,loadAdminQuestions} from './admin-catalog.js';
 import {getSubjectStorageKey,UNIFIED_UI_STORAGE_KEY} from './storage-keys.js';
 import {loadSubjectCatalog,loadModule} from './loader.js';
 import {readSubjectProgress,readAdminProgress,saveSubjectProgress,summarizeSubjectProgress,recordQuestion,recordDiagnostic,markLessonComplete,recordFlashcard} from './progress-store.js';
@@ -48,10 +49,41 @@ async function renderAdmin(subject,token){
   main.innerHTML=`${crumb([{text:'Início',href:'inicio'},{text:subject.shortTitle}])}
     <div class="section-head"><div><p class="eyebrow">Matéria disponível</p><h2>${esc(subject.title)}</h2></div><a class="btn" href="#inicio">← Voltar ao painel</a></div>
     ${local?`<p class="notice">Integração de transição: o ADM-ESTUDO original está incorporado abaixo, sem alterações nas suas aulas, questões ou regras de progresso.</p>
-    <p><a class="btn btn-primary" href="./administracao/index.html" target="_blank" rel="noopener noreferrer">Abrir Administração em tela cheia ↗</a></p>
+    <div class="inline-actions"><a class="btn" href="#admin-modulos">Explorar 757 questões por módulo</a><a class="btn btn-primary" href="./administracao/index.html" target="_blank" rel="noopener noreferrer">Abrir Administração em tela cheia ↗</a></div>
     <iframe id="admin-frame" class="admin-frame" title="Aplicativo ADM-ESTUDO — Administração e Direito Administrativo" src="./administracao/index.html" loading="eager" referrerpolicy="same-origin"></iframe>`:
     `<div class="panel"><h3>Administração já está disponível</h3><p>Esta cópia de teste não inclui os arquivos administrativos. Na publicação pelo GitHub Actions, a versão preservada de <code>Dir-Adm/nova-arquitetura</code> será incorporada automaticamente.</p>
     <p>Enquanto isso, você pode estudar no aplicativo original:</p><a class="btn btn-primary" href="https://profeniclas-lab.github.io/Dir-Adm/" target="_blank" rel="noopener noreferrer">Abrir ADM-ESTUDO original ↗</a></div>`}`;
+}
+/** Visão leve de consulta: não grava respostas nem altera aproveitamento. */
+async function renderAdminModules(token){
+ const data=await loadAdminCatalog();if(token!==sequence)return;
+ main.innerHTML=`${crumb([{text:'Início',href:'inicio'},{text:'Administração',href:'materia/administracao'},{text:'Questões por módulo'}])}
+ <section class="hero"><p class="eyebrow">Consulta rápida</p><h1>Questões de Administração por módulo</h1><p>Escolha um módulo para carregar somente as suas questões. Esta consulta não salva respostas; para treinar com aproveitamento, use o ADM-ESTUDO completo.</p></section>
+ <div class="stats"><div class="stat"><strong class="stat-value">${data.moduleCount}</strong><span class="stat-label">Módulos</span></div>
+ <div class="stat"><strong class="stat-value">${data.questionCount}</strong><span class="stat-label">Questões distintas</span></div>
+ <div class="stat"><strong class="stat-value">Sob demanda</strong><span class="stat-label">Carrega só o módulo escolhido</span></div></div>
+ <div class="section-head"><h2>Escolha o módulo</h2><a class="btn" href="#materia/administracao">Voltar ao ADM-ESTUDO</a></div>
+ <div class="module-list">${data.modules.map(item=>`<a class="module-item" href="#admin-questoes/${esc(item.id)}/1"><strong>${esc(item.id)} · ${esc(item.title)}</strong><small>${item.count} questões</small></a>`).join('')}</div>`;
+}
+async function renderAdminQuestionPreview(moduleId,page,token){
+ const data=await loadAdminCatalog();if(token!==sequence)return;
+ const module=data.modules.find(m=>m.id===moduleId);if(!module)throw Error('Módulo desconhecido.');
+ const questions=await loadAdminQuestions(moduleId);if(token!==sequence)return;
+ const pageSize=6, pages=Math.ceil(questions.length/pageSize);
+ if(!Number.isSafeInteger(page)||page<1||page>pages)throw Error('Página inválida.');
+ const first=(page-1)*pageSize;
+ const visible=questions.slice(first,first+pageSize);
+ main.innerHTML=`${crumb([{text:'Início',href:'inicio'},{text:'Administração',href:'materia/administracao'},{text:'Módulos',href:'admin-modulos'},{text:module.title}])}
+ <div class="section-head"><div><p class="eyebrow">${esc(module.id)} · Consulta por módulo</p><h2>${esc(module.title)}</h2></div><a class="btn" href="#admin-modulos">← Todos os módulos</a></div>
+ <p class="notice">Consulta de leitura: os gabaritos ficam ocultos até você abrir cada explicação. <strong>Nenhuma resposta é registrada aqui.</strong> Para estudar com estatísticas e revisão espaçada, abra o ADM-ESTUDO.</p>
+ <div class="inline-actions"><span class="state">${module.count} questões</span><a class="btn" href="#materia/administracao">Abrir ADM-ESTUDO completo</a></div>
+ <div class="admin-preview">${visible.map((q,i)=>`<article class="activity-card"><p class="eyebrow">Questão ${first+i+1} de ${questions.length} · ${esc(q.id)}</p><h3>${esc(q.stem)}</h3>
+ <ol class="preview-options" type="A">${q.options.map(option=>`<li>${esc(option)}</li>`).join('')}</ol>
+ <details class="preview-answer"><summary>Ver gabarito e comentário</summary><p><strong>Gabarito:</strong> ${String.fromCharCode(65+q.answer)} — ${esc(q.options[q.answer])}</p>
+ ${q.explanation?`<p>${esc(q.explanation)}</p>`:''}${q.examTip?`<p><strong>Dica:</strong> ${esc(q.examTip)}</p>`:''}</details></article>`).join('')}</div>
+ <nav class="preview-pagination" aria-label="Páginas de questões"><span>Página ${page} de ${pages}</span>
+ ${page>1?`<a class="btn" href="#admin-questoes/${esc(moduleId)}/${page-1}">← Anterior</a>`:''}
+ ${page<pages?`<a class="btn btn-primary" href="#admin-questoes/${esc(moduleId)}/${page+1}">Próximas →</a>`:''}</nav>`;
 }
 async function renderSubject(subject,token){
  if(subject.id==='administracao')return renderAdmin(subject,token);
@@ -112,6 +144,8 @@ async function render(){const token=++sequence;currentBundle=null;main.classList
  if(route[0]==='inicio'||route.length===0){renderHome();return}
  if(route[0]==='disciplinas'){renderSubjects();return}
  if(route[0]==='materia'&&route.length===2){const subject=getSubject(route[1]);if(!subject)throw Error('Disciplina não encontrada.');await renderSubject(subject,token);return}
+ if(route[0]==='admin-modulos'&&route.length===1){await renderAdminModules(token);return}
+ if(route[0]==='admin-questoes'&&route.length>=2&&route.length<=3){await renderAdminQuestionPreview(route[1],Number(route[2]??1),token);return}
  if(route[0]==='modulo'&&route.length>=3){const subject=getSubject(route[1]);if(!subject||subject.id==='administracao'||!tabs.some(t=>t[0]===(route[3]??'aulas')))throw Error('Página do módulo inválida.');await renderModule(subject,route[2],route[3]??'aulas',token);return}
  location.hash='#inicio';
  }catch(error){if(token!==sequence)return;main.innerHTML=`<section class="panel"><h2>Não foi possível abrir esta página</h2><p class="notice error">${esc(error.message||error)}</p><a class="btn" href="#inicio">Voltar ao início</a></section>`}}

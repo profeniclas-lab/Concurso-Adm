@@ -47,6 +47,11 @@ fi
 # Fase 4: o arquivo original já foi comparado com a origem; a divisão
 # acontece SOMENTE em dist/ e é verificada antes da publicação.
 node scripts/modularize-admin-questions.mjs dist/administracao
+node scripts/build-admin-lazy-catalog.mjs dist/administracao
+if [[ ! -s dist/administracao/catalogo-leve/manifest.json ]]; then
+  echo 'ERRO: catálogo modular de consulta não gerado.' >&2
+  exit 1
+fi
 if [[ ! -s dist/administracao/js/data/questions-modules/manifest.json ]]; then
   echo 'ERRO: manifesto de modularização ausente.' >&2
   exit 1
