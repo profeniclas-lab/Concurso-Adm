@@ -10,6 +10,7 @@ import {validateLegacyState,legacyAnsweredQuestionIds} from './legacy-compat.js'
 import {EXISTING_ADM_KEY} from './storage-keys.js';
 import {trainingKeyFor} from './training-store.js';
 import {LEGACY_MIGRATION_RECOVERY_KEY} from './legacy-migration.js';
+import {ADMIN_SHARED_ACTIVITY_KEY} from './shared-activity-store.js';
 
 export const PHASE7E_BACKUP_FORMAT='estudo-concursos/phase7e-complete-backup/v1';
 export const PHASE7E_KEYS=Object.freeze([
@@ -17,7 +18,8 @@ export const PHASE7E_KEYS=Object.freeze([
   trainingKeyFor('administracao'),
   PEDAGOGY_STORAGE_KEY,
   LEGACY_MIGRATION_RECOVERY_KEY,
-  PEDAGOGY_RECOVERY_KEY
+  PEDAGOGY_RECOVERY_KEY,
+  ADMIN_SHARED_ACTIVITY_KEY
 ]);
 const isObject=v=>v!==null&&typeof v==='object'&&!Array.isArray(v);
 const validDate=v=>typeof v==='string'&&Number.isFinite(Date.parse(v));
@@ -110,7 +112,7 @@ export function auditPhase7E({index,legacy=null,training,imported=null,
     ]};
 }
 
-/** Backup literal de todos os CINCO registros relevantes (sem restauração automática). */
+/** Backup literal dos registros relevantes, incluindo a nova camada F8B (sem restauração automática). */
 export function buildPhase7EBackup(storage=globalThis.localStorage,now=new Date().toISOString()){
   if(!validDate(now))throw Error('Data do backup inválida.');
   const entries=PHASE7E_KEYS.map(key=>({key,raw:storage.getItem(key)}));

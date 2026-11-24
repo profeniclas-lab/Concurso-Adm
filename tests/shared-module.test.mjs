@@ -72,7 +72,7 @@ test('renderização do índice é informativa e não grava armazenamento',async
  assert.match(el.innerHTML,/Fundamentos de Administração/);
  assert.match(el.innerHTML,/Ler aula/);
  assert.match(el.innerHTML,/Diagnóstico/);
- assert.match(el.innerHTML,/somente leitura/);
+ assert.match(el.innerHTML,/Aproveitamento do módulo/);
  assert.equal(writes,0);assert.deepEqual(copy,fixture());delete globalThis.localStorage;
 });
 test('renderização de aula mostra objetivo, resumo e pergunta sem alterar conteúdo',async()=>{

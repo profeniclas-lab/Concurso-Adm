@@ -53,6 +53,12 @@ node scripts/build-admin-pedagogy-index.mjs dist/administracao
 node scripts/build-admin-shared-bundles.mjs dist/administracao
 # Fase 7E: confronta 24 cenários x 27 módulos com a função original.
 node scripts/audit-phase7e-parity.mjs dist/administracao
+# Fase 8B: confere o novo aproveitamento com o motor original, inclusive registros nativos.
+node scripts/audit-phase8b-parity.mjs dist/administracao
+if [[ ! -s dist/administracao/catalogo-leve/auditoria-fase8b.json ]]; then
+  echo 'ERRO: relatório de paridade Fase 8B ausente.' >&2
+  exit 1
+fi
 if [[ ! -s dist/administracao/catalogo-leve/auditoria-fase7e.json ]]; then
   echo "ERRO: relatório de paridade da Fase 7E ausente." >&2
   exit 1

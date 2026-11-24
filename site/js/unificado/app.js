@@ -1,7 +1,7 @@
 import {listSubjects,getSubject} from './subjects.js';
 import {loadAdminCatalog,loadAdminQuestions} from './admin-catalog.js';
 import {renderAdminTraining,handleAdminTrainingClick} from './admin-training-ui.js';
-import {renderSharedModule} from './shared-module-ui.js';
+import {renderSharedModule,handleSharedModuleClick} from './shared-module-ui.js';
 import {getSubjectStorageKey,UNIFIED_UI_STORAGE_KEY} from './storage-keys.js';
 import {loadSubjectCatalog,loadModule} from './loader.js';
 import {readSubjectProgress,readAdminProgress,saveSubjectProgress,summarizeSubjectProgress,recordQuestion,recordDiagnostic,markLessonComplete,recordFlashcard} from './progress-store.js';
@@ -156,5 +156,6 @@ async function render(){const token=++sequence;currentBundle=null;main.classList
 function setupTheme(){let theme='light';try{theme=JSON.parse(localStorage.getItem(UNIFIED_UI_STORAGE_KEY)??'{}').theme==='dark'?'dark':'light'}catch{}document.documentElement.dataset.theme=theme;const btn=document.getElementById('theme-toggle');const sync=()=>{btn.textContent=theme==='dark'?'☀':'☾';btn.setAttribute('aria-label',theme==='dark'?'Ativar modo claro':'Ativar modo escuro')};sync();btn.addEventListener('click',()=>{theme=theme==='dark'?'light':'dark';document.documentElement.dataset.theme=theme;sync();try{localStorage.setItem(UNIFIED_UI_STORAGE_KEY,JSON.stringify({theme}))}catch{}})}
 setupTheme();window.addEventListener('hashchange',()=>render());document.addEventListener('click',async event=>{
  if(event.target instanceof Element && event.target.closest('button[data-train-action]'))await handleAdminTrainingClick(event,render);
+ else if(event.target instanceof Element && event.target.closest('button[data-shared-action]'))await handleSharedModuleClick(event,render);
  else await handleClick(event);
 });render();

@@ -265,8 +265,8 @@ async function renderAudit(main){
  <section class="stats" aria-label="Resultado da auditoria">${stat(report.totals.ok,'Verificações corretas')}${stat(report.totals.aviso,'Alertas')}${stat(report.totals.erro+extra.length,'Incompatibilidades')}${stat(report.statistics.distinctUnion??'—','Questões distintas entre históricos')}</section>
  <section class="panel"><h2>Conferências técnicas</h2><ul class="audit-checks">${report.checks.map(item=>`<li><strong>${esc(status[item.status])} — ${esc(item.id)}:</strong> ${esc(item.detail)}</li>`).join('')}</ul></section>
  <section class="panel"><h2>Backup completo de proteção</h2>
- <p>Inclui os registros brutos do ADM-ESTUDO, do treino novo, da cópia pedagógica e <strong>das duas recuperações técnicas</strong>. O arquivo JSON é sensível e não deve ser enviado ao repositório. Não existe restauração automática a partir dele nesta fase.</p>
- <button class="btn btn-primary" type="button" data-train-action="audit-export">Exportar os cinco registros</button></section>
+ <p>Inclui os registros brutos do ADM-ESTUDO, do treino novo, da cópia pedagógica, <strong>das duas recuperações técnicas</strong> e das atividades nativas da Fase 8B. O arquivo JSON é sensível e não deve ser enviado ao repositório. Não existe restauração automática a partir dele nesta fase.</p>
+ <button class="btn btn-primary" type="button" data-train-action="audit-export">Exportar todos os registros</button></section>
  <section class="panel"><h2>Conferência manual de encerramento</h2>
  <ol><li>Compare em dois ou três módulos a pontuação com o ADM-ESTUDO original, sobretudo com atividades parciais.</li>
  <li>Confirme a meta de <strong>75 pontos</strong>, sem somar o treino novo à nota herdada.</li>

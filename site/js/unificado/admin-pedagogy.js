@@ -6,6 +6,7 @@
 import {readLegacyState,validateLegacyState} from './legacy-compat.js';
 import {EXISTING_ADM_KEY} from './storage-keys.js';
 import {trainingKeyFor} from './training-store.js';
+import {ADMIN_SHARED_ACTIVITY_KEY,readSharedActivityState,hasSharedActivity} from './shared-activity-store.js';
 
 export const PEDAGOGY_FORMAT='estudo-concursos/admin-pedagogy-index/v1';
 export const PEDAGOGY_STORAGE_KEY='estudoConcursos.v1.pedagogy.administracao';
@@ -192,6 +193,9 @@ export function preparePedagogyImport(index,{storage=globalThis.localStorage,now
   const snap=readPedagogySnapshot(storage);
   if(!snap.ok)throw Error(snap.message);
   if(snap.exists)throw Error('Já existe uma importação pedagógica. Ela foi preservada; não há sobrescrita automática.');
+  const shared=readSharedActivityState('administracao',storage);
+  if(!shared.ok)throw Error(shared.message);
+  if(shared.exists&&hasSharedActivity(shared.state))throw Error('Existem atividades novas da Fase 8B. A importação pedagógica antiga precisa ser reconciliada antes de continuar.');
   if(storage.getItem(PEDAGOGY_RECOVERY_KEY)!==null)throw Error('Há uma recuperação pedagógica pendente; resolva-a antes de importar.');
   const trainingRaw=storage.getItem(TRAINING_KEY);
   return {plan:planPedagogyImport(old.state,index,{now}),legacyRaw:old.raw,trainingRaw,
@@ -203,6 +207,9 @@ export function commitPedagogyImport(draft,{storage=globalThis.localStorage,back
   if(!draft?.plan||draft.plan.format!==PEDAGOGY_SNAPSHOT_FORMAT||!draft.plan.counts?.importedItems)
     return {ok:false,message:'Não há registros pedagógicos verificáveis para importar.'};
   try{
+    const shared=readSharedActivityState('administracao',storage);
+    if(!shared.ok)throw Error(shared.message);
+    if(shared.exists&&hasSharedActivity(shared.state))throw Error('Atividades novas da Fase 8B impedem a importação automática.');
     if(storage.getItem(PEDAGOGY_RECOVERY_KEY)!==null||storage.getItem(PEDAGOGY_STORAGE_KEY)!==draft.pedagogyRaw)
       throw Error('Já existe uma cópia de recuperação ou registro pedagógico.');
     if(storage.getItem(EXISTING_ADM_KEY)!==draft.legacyRaw||storage.getItem(TRAINING_KEY)!==draft.trainingRaw)
@@ -232,6 +239,10 @@ export function inspectPedagogyRecovery(storage=globalThis.localStorage){
 export function restorePedagogyImport({storage=globalThis.localStorage,confirmed=false}={}){
   if(!confirmed)return {ok:false,message:'Confirme a recuperação antes de continuar.'};
   try{
+    // Não desfazer a base importada enquanto existirem aulas/diagnósticos novos vinculados a ela.
+    const shared=readSharedActivityState('administracao',storage);
+    if(!shared.ok)throw Error(shared.message);
+    if(shared.exists&&hasSharedActivity(shared.state))throw Error('Já existem atividades da Fase 8B vinculadas à cópia pedagógica. Salve o backup e reconcilie antes de desfazer a importação.');
     const raw=storage.getItem(PEDAGOGY_RECOVERY_KEY);if(raw===null)throw Error('Sem recuperação pendente.');
     const item=JSON.parse(raw);if(item.format!=='estudo-concursos/pedagogy-recovery/v1')throw Error('Formato incompatível.');
     const current=storage.getItem(PEDAGOGY_STORAGE_KEY);

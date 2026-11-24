@@ -93,10 +93,10 @@ test('registro de recuperação malformado é bloqueador',()=>{
  assert.equal(r.readyForManualReview,false);
  assert.ok(r.checks.some(c=>c.id==='recuperacao-tentativas'&&c.status==='erro'));
 });
-test('backup conserva exatamente as cinco chaves brutas, sem gravação',()=>{
+test('backup conserva todas as chaves brutas, sem gravação',()=>{
  const raw={};for(const [i,key] of PHASE7E_KEYS.entries())raw[key]=i%2===0?`{ "unicode": "çá" , "n": ${i} }`:'invalid_json';
  const db=storage(raw),backup=buildPhase7EBackup(db,now);
- assert.equal(backup.format,PHASE7E_BACKUP_FORMAT);assert.equal(backup.entries.length,5);
+ assert.equal(backup.format,PHASE7E_BACKUP_FORMAT);assert.equal(backup.entries.length,6);
  assert.deepEqual(Object.fromEntries(backup.entries.map(e=>[e.key,e.raw])),raw);
  assert.deepEqual(db.writes,[]);
 });
@@ -137,7 +137,7 @@ test('a rota Verificação 7E renderiza sem gravar qualquer progresso',async()=>
    await renderAdminTraining(['treino-admin','auditoria'],main,()=>true);
    assert.match(main.innerHTML,/Verificação da migração/);
    assert.match(main.innerHTML,/757 questões/);
-   assert.match(main.innerHTML,/Exportar os cinco registros/);
+   assert.match(main.innerHTML,/Exportar todos os registros/);
    assert.deepEqual(db.writes,[]);
  }finally{
    if(oldStorage===undefined)delete globalThis.localStorage;else globalThis.localStorage=oldStorage;

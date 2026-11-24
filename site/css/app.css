@@ -47,3 +47,12 @@ html[data-theme="dark"]{color-scheme:dark;--bg:#121927;--surface:#1b2434;--surfa
 
 /* Fase 8A — conteúdo pedagógico com quebras preservadas. */
 .native-paragraph {white-space:pre-line;line-height:1.7;overflow-wrap:anywhere;}
+/* Fase 8B — controle de registro em módulos nativos */
+.shared-achievement{margin:16px 0}
+.shared-achievement strong{font-size:1.4rem;font-variant-numeric:tabular-nums}
+.shared-study-record{margin-top:22px;padding:16px;border:1px solid var(--line);border-radius:12px;background:var(--surface-2)}
+.shared-study-record h3{margin-top:0}
+.shared-rating-actions{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0}
+.shared-rating-actions .btn{white-space:normal;text-align:center}
+.shared-rating-actions .shared-selected{outline:2px solid var(--good);outline-offset:2px}
+@media(max-width:540px){.shared-rating-actions .btn{flex:1 1 110px}.shared-achievement strong{display:block;margin-bottom:8px}}
