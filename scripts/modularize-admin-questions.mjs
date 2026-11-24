@@ -14,6 +14,14 @@ import { deepStrictEqual, equal } from 'node:assert/strict';
 
 // SHA Git do questions.js no commit administrativo fixado pela Fase 3.
 export const EXPECTED_QUESTION_BLOB_SHA = 'b772363d33f069024bd06b1956e703124992cd87';
+// Snapshot da branch administrativa usada nesta versão do portal (não é uma regra pedagógica).
+export const EXPECTED_TOTAL_QUESTIONS = 757;
+export const OVERLAY_BATCHES = Object.freeze([
+  { file: 'questions-f25-lote04.js', resultName: 'F25_L04_RESULT', expected: 53 },
+  { file: 'questions-f25-lote06.js', resultName: 'F25_L06_RESULT', expected: 51 },
+  { file: 'questions-f25-lote08.js', resultName: 'F25_L08_RESULT', expected: 23 },
+  { file: 'questions-f25-lote09.js', resultName: 'F25_L09_RESULT', expected: 46 }
+]);
 const DECLARATION = 'export const QUESTIONS = ';
 const END_MARKER = '];';
 const MODULE_ID_PATTERN = /^(?:ADM|AP|DA)-\d{2}$/;
@@ -92,6 +100,44 @@ export function planQuestionSplit(source, { expectedBlobSha = null } = {}) {
   return { facade, files, manifest, originalQuestions: questions };
 }
 
+/** Resumo técnico de integridade: contabiliza o catálogo final sem modificar questões. */
+export function summarizeCompleteBank(baseManifest, finalQuestions, batches, {expectedCount=null}={}) {
+  if (!Array.isArray(finalQuestions)) throw Error('Banco final inválido.');
+  const unique = new Set();
+  const totals = new Map();
+  for (const q of finalQuestions) {
+    if (!q || typeof q.id !== 'string' || unique.has(q.id))
+      throw Error(`Questão final sem ID ou ID duplicado: ${q?.id}`);
+    unique.add(q.id);
+    if (!MODULE_ID_PATTERN.test(q.moduleId)) throw Error(`Módulo final desconhecido: ${q.moduleId}`);
+    totals.set(q.moduleId, (totals.get(q.moduleId)||0)+1);
+  }
+  if (expectedCount !== null && finalQuestions.length !== expectedCount)
+    throw Error(`Banco administrativo incompleto: esperadas ${expectedCount} questões, encontradas ${finalQuestions.length}.`);
+  const baseCount = baseManifest.questionCount;
+  const addedCount = finalQuestions.length - baseCount;
+  if (addedCount < 0 || batches.reduce((n,b)=>n+b.added,0) !== addedCount)
+    throw Error('Quantidade dos lotes adicionais diferente do total do banco.');
+  const modules = baseManifest.modules.map(m => {
+    const totalCount = totals.get(m.id)||0;
+    if (totalCount < m.count) throw Error(`Faltam questões do módulo ${m.id}.`);
+    return {...m, baseCount:m.count, additionalCount:totalCount-m.count, totalCount};
+  });
+  if (modules.reduce((n,m)=>n+m.totalCount,0) !== finalQuestions.length)
+    throw Error('Existem questões de módulos não registrados no manifesto.');
+  return {
+    ...baseManifest,
+    format:'estudo-concursos/admin-question-modules/v2',
+    baseQuestionCount:baseCount,
+    additionalQuestionCount:addedCount,
+    questionCount:finalQuestions.length,
+    totalQuestionCount:finalQuestions.length,
+    fullDataSha256:sha256(JSON.stringify(finalQuestions)),
+    batches,
+    modules
+  };
+}
+
 async function main() {
   const root = process.argv[2];
   if (!root) throw Error('Informe a pasta administrativa montada dentro de dist/.');
@@ -107,15 +153,30 @@ async function main() {
     writeFileSync(join(destination, 'js/data', relative), content, 'utf8');
   }
   writeFileSync(sourceFile, result.facade, 'utf8');
-  writeFileSync(join(outDir, 'manifest.json'), JSON.stringify(result.manifest, null, 2) + '\n', 'utf8');
-  // Confere a API executável, incluindo a ordem original e todos os dados.
-  const imported = await import(pathToFileURL(sourceFile).href + '?validation=phase04');
+  // Confere a API executável, incluindo a ordem original e todos os dados da base.
+  const imported = await import(pathToFileURL(sourceFile).href);
   deepStrictEqual(imported.QUESTIONS, result.originalQuestions, 'O arquivo regenerado alterou os dados das questões.');
   for (const module of result.manifest.modules) {
-    equal(imported.questionsForModule(module.id).length, module.count, `Contagem divergente em ${module.id}`);
+    equal(imported.questionsForModule(module.id).length, module.count, `Contagem-base divergente em ${module.id}`);
   }
-  console.log(`Fase 4 validada: ${result.manifest.questionCount} questões originais preservadas em ${result.manifest.moduleCount} módulos.`);
-  console.log(`SHA-256 dos dados: ${result.manifest.dataSha256}`);
+  // Simula a ordem real de inicialização: os quatro lotes F25 entram antes
+  // da revisão F23, que não acrescenta questões, apenas revisa registros.
+  const batches = [];
+  for (const spec of OVERLAY_BATCHES) {
+    const path = join(destination,'js/data',spec.file);
+    const module = await import(pathToFileURL(path).href);
+    const report = module[spec.resultName];
+    if (!report || report.planned !== spec.expected || report.added !== spec.expected)
+      throw Error(`Lote adicional incompleto: ${spec.file}; esperado ${spec.expected}, recebido ${report?.added ?? 'indisponível'}.`);
+    batches.push({file:spec.file,planned:report.planned,added:report.added});
+  }
+  await import(pathToFileURL(join(destination,'js/data/questions-f23-lote02.js')).href);
+  const manifest = summarizeCompleteBank(result.manifest, imported.QUESTIONS, batches,
+    {expectedCount:EXPECTED_TOTAL_QUESTIONS});
+  writeFileSync(join(outDir, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n', 'utf8');
+  console.log(`Fase 4 validada: ${manifest.baseQuestionCount} questões-base modularizadas em ${manifest.moduleCount} módulos.`);
+  console.log(`Banco completo: ${manifest.totalQuestionCount} questões distintas (${manifest.additionalQuestionCount} dos quatro lotes F25).`);
+  console.log(`SHA-256 do banco completo: ${manifest.fullDataSha256}`);
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {

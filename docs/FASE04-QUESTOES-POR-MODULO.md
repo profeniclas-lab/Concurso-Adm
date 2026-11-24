@@ -1,58 +1,61 @@
-# Fase 4 — Modularização técnica do Banco de Questões de Administração
+# Fase 4 — Correção do manifesto e da publicação do ESTUDO-CONCURSOS
 
-## Escopo fechado
+## Problema identificado no GitHub Pages (24/11/2026)
 
-- Nenhuma revisão pedagógica de enunciados, respostas, comentários ou fundamentos.
-- Nenhuma alteração no repositório `profeniclas-lab/Dir-Adm`.
-- Nenhum acesso ou escrita no `localStorage`, backups ou dados de estudo.
-- A origem segue **fixada** no commit `3790500f772aad3f8c263b68e8e2dfd8bab7c465` da branch `nova-arquitetura` do `Dir-Adm`.
-- O arquivo de questões original está fixado pelo SHA Git `b772363d33f069024bd06b1956e703124992cd87`.
+Foram observadas **duas publicações concorrentes** no repositório `profeniclas-lab/Concurso-Adm`:
 
-## O que muda no GitHub Pages
+1. `Publicar ESTUDO-CONCURSOS` (GitHub Actions), que executa `npm test`, `npm run build` e envia a pasta `dist/` ao Pages;
+2. `pages build and deployment` (publicação antiga por branch/Jekyll), que publica arquivos da branch e **não** a pasta `dist/` produzida pelo nosso build.
 
-Após o `npm run build`, a pasta publicada `dist/administracao/js/data/` terá:
+Na execução identificada, a primeira publicação terminou com sucesso às 11:53:39 UTC, mas a segunda terminou às 11:53:52 UTC. A publicação de branch ocorreu por último, causando a ausência da pasta administrativa gerada. O HTTP 404 do manifesto é compatível com isso.
 
-```
-questions.js                   # fachada ES modules, preserva QUESTIONS e questionsForModule()
-questions-modules/
-  ADM-01.js
-  ADM-02.js
-  ...
-  AP-13.js
-  AP-14.js
-  DA-15.js
-  ...
-  DA-27.js
-  manifest.json               # contagem, módulo, hashes de identificação e dados
-```
+**Correção necessária, sem editar código:** no GitHub, em `Concurso-Adm → Settings → Pages → Build and deployment`, mude `Source` para **GitHub Actions** (não `Deploy from a branch`). Depois, abra `Actions → Publicar ESTUDO-CONCURSOS → Run workflow`, selecione `main` e execute. Confirme que `build` e `deploy` estão verdes. Recarregue a página após a conclusão.
 
-O banco-base original possui **584 questões em 27 módulos**, confirmado no arquivo fixado. Essas quantidades são conferidas antes de disponibilizar a versão transformada; os lotes posteriores da Fase 23/25 são mantidos intactos.
+## Contagem correta do banco administrativo
 
-## Segurança da transformação
+Análise técnica dos conjuntos de IDs da branch `Dir-Adm/nova-arquitetura` fixada no commit `3790500f772aad3f8c263b68e8e2dfd8bab7c465`:
 
-1. O CI baixa a versão fixada de Administração e copia exatamente seus arquivos para `dist/administracao`.
-2. Confere a cópia integral com `diff -qr` **antes** de transformar o banco.
-3. A divisão se recusa a prosseguir se o SHA do arquivo de questões divergir, se IDs estiverem duplicados, se a lista não for um array JSON ou se a API pública tiver mudado.
-4. Separa os registros por `moduleId`, mantendo ordem e conteúdo de todos os campos.
-5. O `questions.js` passa a importar os arquivos de cada módulo e a exportar a **mesma** variável `QUESTIONS` e a **mesma** função `questionsForModule`.
-6. Carrega o JavaScript gerado em Node e faz uma comparação profunda com os objetos da origem; qualquer divergência falha o build e impede a publicação.
-7. Grava `manifest.json` com quantidades por módulo e SHA-256 do conteúdo total.
+| Origem | Quantidade |
+| --- | ---: |
+| `js/data/questions.js` — base | 584 |
+| `js/data/questions-f25-lote04.js` | 53 |
+| `js/data/questions-f25-lote06.js` | 51 |
+| `js/data/questions-f25-lote08.js` | 23 |
+| `js/data/questions-f25-lote09.js` | 46 |
+| **Total distinto** | **757** |
 
-## Limites desta fase
+Os cinco conjuntos possuem 757 IDs distintos e pertencem a 27 módulos. A revisão F23/L02 modifica registros existentes e não acrescenta uma sexta lista de questões.
 
-Esta fase modulariza **os arquivos publicados**, ainda não os arquivos mantidos no repositório-fonte `Dir-Adm`. A origem continua preservada, evitando uma migração destrutiva antes da validação. O motor administrativo ainda importa os 27 arquivos de uma vez: carregamento verdadeiramente sob demanda e migração para um motor compartilhado ficam para etapas posteriores. Os lotes extras seguem intactos.
+Os lotes F25 contêm **questões autorais elaboradas com base em temas de provas e listas**. Não se deve atribuir automaticamente a elas a condição de transcrições literais de questões oficiais.
 
-## Como instalar
+## O que a correção faz
 
-No repositório `Concurso-Adm`, substitua `scripts/build-site.sh` e adicione `scripts/modularize-admin-questions.mjs`, `tests/admin-modularization.test.mjs` e este documento. `package.json` e o workflow já existentes servem sem alterações: `npm test` inclui o novo teste e `npm run build` executa a transformação.
+- Divide as **584 questões-base** em 27 arquivos de módulo, exatamente como na primeira entrega da Fase 4.
+- Mantém os 173 itens dos quatro lotes F25 separados e carregados pelo mecanismo já existente.
+- Executa no build a mesma ordem de carregamento das quatro adições F25 e da revisão F23 usada pelo aplicativo.
+- Bloqueia o build se algum lote não trouxer sua quantidade esperada, se houver IDs duplicados ou se o total divergir de 757.
+- `manifest.json` passa a registrar `questionCount: 757`, `totalQuestionCount: 757`, `baseQuestionCount: 584`, `additionalQuestionCount: 173` e `moduleCount: 27`.
+- Em `modules`, `count` e `baseCount` identificam os itens do arquivo modularizado; `additionalCount` identifica itens dos lotes F25; `totalCount` corresponde à soma por módulo.
+- Não altera os textos/gabaritos das questões, o repositório `Dir-Adm`, `localStorage` nem o código de persistência.
+
+**Limite:** os 173 itens adicionais ainda não foram repartidos em arquivos próprios por módulo. A modularização completa e o carregamento sob demanda continuam etapas posteriores.
+
+## Arquivos a substituir no repositório Concurso-Adm
+
+Substituir somente:
+
+1. `scripts/modularize-admin-questions.mjs`
+2. `tests/admin-modularization.test.mjs`
+3. `docs/FASE04-QUESTOES-POR-MODULO.md`
+
+Não é necessário editar `index.html`, `scripts/build-site.sh`, `.github/workflows/pages.yml`, nem alterar o `Dir-Adm`.
 
 ## Como verificar
 
-Depois que o workflow **Publicar ESTUDO-CONCURSOS** terminar em verde:
+1. Em `Settings → Pages`, certifique-se de que a origem é **GitHub Actions**.
+2. Faça commit dos três arquivos corrigidos.
+3. Em `Actions → Publicar ESTUDO-CONCURSOS`, confira que os jobs `build` e `deploy` foram concluídos com sucesso; o build deve registrar 584 questões-base e 757 questões no banco completo.
+4. Abra `https://profeniclas-lab.github.io/Concurso-Adm/administracao/js/data/questions-modules/manifest.json`.
+5. Procure `baseQuestionCount: 584`, `additionalQuestionCount: 173`, `totalQuestionCount: 757`, `moduleCount: 27`.
 
-- A interface deve abrir normalmente.
-- Administração deve continuar abrindo dentro do portal.
-- Acesse `https://profeniclas-lab.github.io/Concurso-Adm/administracao/js/data/questions-modules/manifest.json` e confira `questionCount: 584` e `moduleCount: 27`.
-- Abra algumas questões do banco e confirme que seu progresso preexistente continua disponível (os IDs não foram alterados).
-
-Caso a publicação falhe, consulte o erro em **GitHub → Actions → Publicar ESTUDO-CONCURSOS**. O site anteriormente publicado não deve ser substituído por um build que falhou.
+Se aparecer 404, verifique a origem do Pages e a última execução de publicação antes de qualquer nova alteração no código.

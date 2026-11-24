@@ -4,7 +4,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { planQuestionSplit, gitBlobSha, EXPECTED_QUESTION_BLOB_SHA } from '../scripts/modularize-admin-questions.mjs';
+import { planQuestionSplit, gitBlobSha, EXPECTED_QUESTION_BLOB_SHA, summarizeCompleteBank, OVERLAY_BATCHES, EXPECTED_TOTAL_QUESTIONS } from '../scripts/modularize-admin-questions.mjs';
 
 const sample = [
   {id:'Q-ADM-01-01',moduleId:'ADM-01',stem:'Pergunta com acentuação: eficiência',options:['Certo','Errado'],answer:1,explanation:'Texto preservado'},
@@ -57,5 +57,46 @@ test('F4: mantém o carregamento compatível com módulos adicionais que acresce
     const lib=await import(pathToFileURL(join(dir,'questions.js')).href);
     assert.equal(lib.QUESTIONS.length,sample.length+1);
     assert.equal(lib.questionsForModule('DA-17').length,2);
+  }finally{rmSync(dir,{recursive:true,force:true});}
+});
+
+
+test('F4 correção: manifesta o banco completo, mantendo separada a base modularizada', () => {
+  const plan = planQuestionSplit(example(sample));
+  const additions = [{id:'Q-ADM-01-F25-01',moduleId:'ADM-01',stem:'Nova questão',options:['Sim','Não'],answer:0}];
+  const full = [...sample,...additions];
+  const manifest = summarizeCompleteBank(plan.manifest, full, [{file:'lote-teste.js',planned:1,added:1}],{expectedCount:4});
+  assert.equal(manifest.questionCount,4);
+  assert.equal(manifest.baseQuestionCount,3);
+  assert.equal(manifest.additionalQuestionCount,1);
+  assert.equal(manifest.totalQuestionCount,4);
+  assert.equal(manifest.modules.find(x=>x.id==='ADM-01').baseCount,2);
+  assert.equal(manifest.modules.find(x=>x.id==='ADM-01').totalCount,3);
+  assert.equal(manifest.modules.find(x=>x.id==='ADM-01').count,2);
+  assert.equal(manifest.modules.reduce((n,m)=>n+m.totalCount,0),4);
+  assert.throws(()=>summarizeCompleteBank(plan.manifest, full, [],{expectedCount:4}),/lotes/);
+  assert.throws(()=>summarizeCompleteBank(plan.manifest, full, [{added:1}],{expectedCount:5}),/incompleto/);
+  assert.throws(()=>summarizeCompleteBank(plan.manifest,[...full,full[0]],[{added:2}]),/duplicado/);
+  assert.equal(OVERLAY_BATCHES.reduce((n,x)=>n+x.expected,0),173);
+  assert.equal(EXPECTED_TOTAL_QUESTIONS,584+173);
+});
+
+
+test('F4 correção: overlays usam a mesma instância ESM de QUESTIONS para contagem final', async () => {
+  const plan=planQuestionSplit(example(sample));
+  const dir=mkdtempSync(join(tmpdir(),'estudo-f4-final-'));
+  try {
+    mkdirSync(join(dir,'questions-modules'));
+    writeFileSync(join(dir,'package.json'),'{"type":"module"}');
+    writeFileSync(join(dir,'questions.js'),plan.facade);
+    for(const [path,content] of plan.files)writeFileSync(join(dir,path),content);
+    writeFileSync(join(dir,'batch.js'),`import {QUESTIONS} from './questions.js';\nQUESTIONS.push({id:'Q-ADM-01-EXTRA',moduleId:'ADM-01'});\nexport const BATCH_RESULT={planned:1,added:1};\n`);
+    const base=await import(pathToFileURL(join(dir,'questions.js')).href);
+    assert.equal(base.QUESTIONS.length,3);
+    const batch=await import(pathToFileURL(join(dir,'batch.js')).href);
+    assert.equal(batch.BATCH_RESULT.added,1);
+    assert.equal(base.QUESTIONS.length,4,'O lote deve modificar a MESMA lista conferida no manifesto.');
+    const result=summarizeCompleteBank(plan.manifest,base.QUESTIONS,[{file:'batch.js',added:1}],{expectedCount:4});
+    assert.equal(result.totalQuestionCount,4);
   }finally{rmSync(dir,{recursive:true,force:true});}
 });
