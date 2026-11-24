@@ -32,6 +32,7 @@ test('entrada do portal montado não usa index antigo da raiz',()=>{
   assert.match(script,/grep -q 'ESTUDO-CONCURSOS' dist\/index\.html/);
   assert.match(script,/ADMIN_SHA='3790500f772aad3f8c263b68e8e2dfd8bab7c465'/);
   assert.match(script,/diff -qr/);
+  assert.match(script,/node scripts\/modularize-admin-questions\.mjs dist\/administracao/);
   assert.doesNotMatch(read('site/js/unificado/app.js'),/localStorage\.setItem\(['"]admEstudo\.v2\.state/);
 });
 
@@ -43,7 +44,7 @@ test('tela de Administração oferece iframe e alternativa em tela cheia',()=>{
 });
 
 const zipAvailable=process.platform!=='win32'&&spawnSync('zip',['-v'],{stdio:'ignore'}).status===0;
-test('build com pacote administrativo simulado copia arquivos sem alterações',
+test('build com arquivo administrativo inesperado falha sem afetar a origem',
  {skip:!zipAvailable},()=>{
   const temp=mkdtempSync(join(tmpdir(),'estudo-deploy-test-'));
   const tree=join(temp,`Dir-Adm-${SHA}`);
@@ -61,10 +62,11 @@ test('build com pacote administrativo simulado copia arquivos sem alterações',
     const run=spawnSync('bash',['scripts/build-site.sh'],{
       cwd:root,encoding:'utf8',env:{...process.env,ESTUDO_ADMIN_ARCHIVE:archive}
     });
-    assert.equal(run.status,0,run.stderr||run.stdout);
+    assert.notEqual(run.status,0,'O build não pode aceitar um questions.js diferente da fonte fixada.');
+    assert.match(run.stderr||run.stdout,/Versão das questões administrativas diferente da aprovada/);
     assert.match(read('dist/index.html'),/ESTUDO-CONCURSOS/);
     for(const [f,content] of expected) assert.equal(read(`dist/administracao/${f}`),content,f);
-    assert.match(read('dist/administracao/FONTE-INTEGRACAO.txt'),new RegExp(SHA));
+    assert.ok(!existsSync(join(root,'dist','administracao','js','data','questions-modules','manifest.json')));
     assert.ok(existsSync(join(root,'dist','.nojekyll')));
     assert.ok(!existsSync(join(root,'dist','content','questions.js')),
       'Não copiar arquivos legados da raiz do repositório no portal publicado.');

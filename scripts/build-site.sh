@@ -44,5 +44,12 @@ if ! diff -qr "$SOURCE_DIR" dist/administracao >/dev/null; then
   echo 'ERRO: a cópia administrativa não corresponde exatamente à origem.' >&2
   exit 1
 fi
+# Fase 4: o arquivo original já foi comparado com a origem; a divisão
+# acontece SOMENTE em dist/ e é verificada antes da publicação.
+node scripts/modularize-admin-questions.mjs dist/administracao
+if [[ ! -s dist/administracao/js/data/questions-modules/manifest.json ]]; then
+  echo 'ERRO: manifesto de modularização ausente.' >&2
+  exit 1
+fi
 printf 'fonte=profeniclas-lab/Dir-Adm\nbranch=nova-arquitetura\ncommit=%s\n' "$ADMIN_SHA" > dist/administracao/FONTE-INTEGRACAO.txt
 echo "Build completo (Administração incorporada no commit ${ADMIN_SHA})."
