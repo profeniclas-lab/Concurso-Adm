@@ -4,6 +4,9 @@ import {readPedagogySnapshot,loadPedagogyIndex,modulePedagogy} from './admin-ped
 import {assertCompatiblePedagogySnapshot} from './admin-module-progress.js';
 import {readSharedActivityState,fingerprintBaseline,sameBaseline} from './shared-activity-store.js';
 import {calculateSharedModuleProgress} from './shared-progress.js';
+import {readTrainingState} from './training-store.js';
+import {createTrainingState} from './training-engine.js';
+import {loadAdminQuestions} from './admin-catalog.js';
 
 export function readSharedBaseline(storage=globalThis.localStorage){
  if(!storage?.getItem)return {source:'none',raw:null,progress:{}};
@@ -31,6 +34,12 @@ export async function buildSharedStudyView(bundle,{
  }
  const baseline=readSharedBaseline(storage);
  const signature=await fingerprintBaseline(baseline);
+ const trainRead=storage?.getItem?readTrainingState(storage):{ok:true,state:createTrainingState()};
+ if(!trainRead.ok)return {source:baseline.source,locked:true,activity:activity.state,score:null,
+   reason:'O histórico de tentativas está incompatível. Nenhum dado será alterado. '+trainRead.message};
+ if(trainRead.state.exerciseBaseline&&!sameBaseline(trainRead.state.exerciseBaseline,signature))
+   return {source:baseline.source,locked:true,activity:activity.state,score:null,
+     reason:'A fonte pedagógica vinculada aos exercícios mudou. Preserve o backup e reconcilie antes de continuar.'};
  if(activity.state.baseline&&!sameBaseline(activity.state.baseline,signature)){
    return {source:baseline.source,locked:true,activity:activity.state,
      reason:'A fonte do progresso antigo mudou após o início das atividades no novo motor. A pontuação conjunta fica suspensa e novas gravações são bloqueadas. Guarde um backup e reconcilie os históricos antes de continuar.',
@@ -47,7 +56,11 @@ export async function buildSharedStudyView(bundle,{
      original=baseline.imported.achievements[bundle.moduleId]??null;
    }else original=modulePedagogy(baseline.legacy,module);
  }
- const score=calculateSharedModuleProgress(bundle,baseline.progress,original,activity.state);
+ const training=trainRead.state;
+ const needsQuestions=!!training.exerciseSessions?.[bundle.moduleId]||
+   Object.values(training.questions).some(x=>x.moduleId===bundle.moduleId&&x.history.some(h=>h.source==='bank'));
+ const questions=needsQuestions?await loadAdminQuestions(bundle.moduleId):[];
+ const score=calculateSharedModuleProgress(bundle,baseline.progress,original,activity.state,{training,questions});
  return {source:baseline.source,sourceAt:baseline.source==='imported'?
    baseline.imported.metadata.importedAt:baseline.legacy?.metadata?.updatedAt??null,
    locked:false,activity:activity.state,score};

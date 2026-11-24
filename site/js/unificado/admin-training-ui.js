@@ -11,7 +11,7 @@ import {TRAINING_KEY,recordTrainingAttempt,summarizeTraining,reviewEntries,
   selectExamQuestions,createExam,answerExam,navigateExam,finishExam} from './training-engine.js';
 const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":"&#39;"}[c]));
 const a=(hash,label,cls='btn')=>`<a class="${cls}" href="#${esc(hash)}">${esc(label)}</a>`;
-const title=(heading,subtitle='')=>`<div class="section-head"><div><p class="eyebrow">Novo motor · Fase 6</p><h1>${esc(heading)}</h1>${subtitle?`<p class="muted">${esc(subtitle)}</p>`:''}</div>${a('materia/administracao','Abrir ADM-ESTUDO')}</div>`;
+const title=(heading,subtitle='')=>`<div class="section-head"><div><p class="eyebrow">Motor compartilhado · Fase 8C</p><h1>${esc(heading)}</h1>${subtitle?`<p class="muted">${esc(subtitle)}</p>`:''}</div>${a('materia/administracao','Abrir ADM-ESTUDO')}</div>`;
 const fmt=x=>x?new Date(x).toLocaleDateString('pt-BR'):'—';
 const alphabet=i=>String.fromCharCode(65+i);
 const retake=new Set();
@@ -24,10 +24,13 @@ const linkNav=`<nav class="training-nav" aria-label="Atividades do novo motor">$
 const answers=q=>q.options.map((option,i)=>`<button class="choice" type="button" data-train-action="bank-answer" data-qid="${esc(q.id)}" data-selected="${i}">${alphabet(i)}. ${esc(option)}</button>`).join('');
 const explain=q=>`<div class="feedback"><strong>Gabarito: ${alphabet(q.answer)} — ${esc(q.options[q.answer])}</strong>${q.explanation?`<p>${esc(q.explanation)}</p>`:''}${q.examTip?`<p><strong>Dica:</strong> ${esc(q.examTip)}</p>`:''}</div>`;
 function bankItem(q,index,state,{review=false}={}){
- const r=state.questions[q.id];const key=(review?'r:':'b:')+q.id;
- const show=r&&!retake.has(key);
+ const r=state.questions[q.id],bankAttempts=r?.history?.filter(h=>h.source==='bank')??[];
+ const bankLast=bankAttempts.at(-1);const key=(review?'r:':'b:')+q.id;
+ const show=(review?!!r:!!bankLast)&&!retake.has(key);
+ const lastCorrect=review?r?.lastCorrect:bankLast?.correct;
+ const answerCount=review?r?.attempts:bankAttempts.length;
  return `<article class="activity-card" data-train-question="${esc(q.id)}"><p class="eyebrow">Questão ${index} · ${esc(q.id)}</p><h3>${esc(q.stem)}</h3>
- ${show?`<p class="state ${r.lastCorrect?'live':''}">Última tentativa: ${r.lastCorrect?'Acerto':'Erro'} · ${r.attempts} tentativa(s)</p>${explain(q)}<button class="btn" type="button" data-train-action="retry" data-qid="${esc(q.id)}" data-review="${review?'1':'0'}">Responder novamente</button>`:
+ ${show?`<p class="state ${lastCorrect?'live':''}">Última tentativa ${review?'na revisão':'no Banco'}: ${lastCorrect?'Acerto':'Erro'} · ${answerCount} tentativa(s)</p>${explain(q)}<button class="btn" type="button" data-train-action="retry" data-qid="${esc(q.id)}" data-review="${review?'1':'0'}">Responder novamente</button>`:
  `<div class="training-answers">${q.options.map((v,i)=>`<button class="choice" type="button" data-train-action="${review?'review-answer':'bank-answer'}" data-qid="${esc(q.id)}" data-selected="${i}">${alphabet(i)}. ${esc(v)}</button>`).join('')}</div>`}
  </article>`;
 }
@@ -37,7 +40,7 @@ async function renderHome(main){
  <section class="stats" aria-label="Resumo da nova área">${stat(m.questionCount,'Questões disponíveis')}${stat(info.distinct,'Questões já praticadas')}${stat(info.accuracy===null?'—':info.accuracy+'%','Acerto por tentativa')}${stat(info.due,'Revisões vencidas')}</section>
  <div class="training-actions"><article class="panel"><h2>Banco de questões</h2><p>Escolha um módulo e responda com correção imediata.</p>${a('treino-admin/modulos','Escolher módulo','btn btn-primary')}</article>
  <article class="panel"><h2>Simulado de 20 questões</h2><p>Treino geral ou por módulo, com retomada se você fechar a página.</p>${a('treino-admin/simulado','Abrir simulados')}</article>
- <article class="panel"><h2>Revisão de erros</h2><p>Organize novas tentativas com intervalos simples.</p>${a('treino-admin/revisao','Revisar erros')}</article>
+ <article class="panel"><h2>Revisões programadas</h2><p>Reveja erros e questões agendadas após sua autoavaliação.</p>${a('treino-admin/revisao','Revisar erros')}</article>
  <article class="panel"><h2>Progresso por módulo</h2><p>Consulte o aproveitamento importado e a atividade nova, sem somar as duas notas.</p>${a('treino-admin/modulos','Ver meus módulos')}</article></div>`;
 }
 /**
@@ -65,13 +68,13 @@ async function renderModules(main){
  const {overview,warnings}=await moduleOverview();
  main.innerHTML=`${title('Módulos: progresso e questões','27 módulos · atividade pedagógica e treino mostrados separadamente')}${linkNav}${note}
  ${warningHtml(warnings)}
- <p class="notice" role="note"><strong>Origem do aproveitamento:</strong> ${esc(sourceText(overview.source))}. A nota pedagógica de 75 pontos <strong>não incorpora</strong> as novas tentativas, e questões iguais não são somadas duas vezes. ${overview.sourceMayBeOlder?'O ADM-ESTUDO original pode ter sido atualizado após a importação.':''}</p>
+ <p class="notice" role="note"><strong>Fotografia pedagógica herdada:</strong> ${esc(sourceText(overview.source))}. Os valores desta lista não incluem as novas aulas e os novos exercícios. <strong>Abra o módulo no motor compartilhado</strong> para consultar a pontuação atualizada sem duplicações. ${overview.sourceMayBeOlder?'O ADM-ESTUDO original pode ter sido atualizado após a importação.':''}</p>
  <section class="stats" aria-label="Progresso por módulo">${stat(overview.rows.length,'Módulos disponíveis')}${stat(overview.started,'Módulos com aproveitamento registrado')}${stat(overview.atGoal,'Módulos com meta de 75 pontos')}</section>
  <div class="module-list">${overview.rows.map(x=>`<article class="module-item module-progress-row">
  <div class="module-progress-heading"><div><h2>${esc(x.id)} · ${esc(x.title)}</h2><p class="small muted">${x.questionsAvailable} questões cadastradas</p></div><span class="state ${x.completed?'live':''}">${x.completed?'75 pontos atingidos':x.hasData?'Em andamento':'Sem registro'}</span></div>
  <p><strong>Pedagógico:</strong> ${esc(scoreText(x))}</p>
  <p class="small muted"><strong>Novo treino:</strong> ${x.training.distinct} questões distintas, ${x.training.attempts} tentativas e ${x.training.due} revisão(ões) vencida(s) — estatísticas independentes.</p>
- <div class="inline-actions">${a(`treino-admin/modulo/${x.id}`,'Ver progresso e atividades')}${a(`estudo/administracao/${x.id}`,'Estudar aulas e diagnóstico')}${a(`treino-admin/banco/${x.id}/1`,'Responder questões','btn btn-primary')}</div></article>`).join('')}</div>`;
+ <div class="inline-actions">${a(`treino-admin/modulo/${x.id}`,'Ver progresso e atividades')}${a(`estudo/administracao/${x.id}`,'Abrir módulo unificado')}${a(`treino-admin/banco/${x.id}/1`,'Responder questões','btn btn-primary')}</div></article>`).join('')}</div>`;
 }
 async function renderAdminModuleDetails(main,moduleId){
  const {overview,warnings}=await moduleOverview();
@@ -80,7 +83,7 @@ async function renderAdminModuleDetails(main,moduleId){
  const status=x.completed?'Meta de 75 pontos atingida':x.hasData?'Meta ainda não atingida':'Aproveitamento ainda não registrado';
  main.innerHTML=`${title(`${x.id} — ${x.title}`,'Progresso pedagógico por módulo · Fase 7D')}${linkNav}${warningHtml(warnings)}
  <div class="inline-actions">${a('treino-admin/modulos','← Todos os módulos')}${a(`estudo/administracao/${x.id}`,'Abrir aulas no motor comum')}${a(`treino-admin/banco/${x.id}/1`,'Treinar questões','btn btn-primary')}${a('treino-admin/pedagogia','Gerenciar importação pedagógica')}</div>
- <p class="notice" role="note"><strong>Fonte da pontuação:</strong> ${esc(sourceText(x.source))}${x.sourceAt?' · referência '+esc(fmt(x.sourceAt)):''}. ${x.source==='imported'?'Esta é uma fotografia do momento da importação; novas atividades não alteram esta nota.':''}${x.sourceMayBeOlder?' O registro original pode ter atividades posteriores.':''}</p>
+ <p class="notice" role="note"><strong>Fonte da pontuação:</strong> ${esc(sourceText(x.source))}${x.sourceAt?' · referência '+esc(fmt(x.sourceAt)):''}. ${x.source==='imported'?'Esta é uma fotografia do momento da importação; consulte o módulo unificado para a nota atualizada.':''}${x.sourceMayBeOlder?' O registro original pode ter atividades posteriores.':''}</p>
  <section class="panel"><h2>Aproveitamento pedagógico</h2>
  <p class="module-score">${x.hasData?`${points(x.earnedWeightedPoints)} <span>de 100 pontos · ${x.percentage}%</span>`:'— <span>sem atividade pedagógica registrada</span>'}</p>
  <progress class="module-progress-meter" max="100" value="${x.hasData?x.earnedWeightedPoints:0}" aria-label="Pontos de aproveitamento pedagógico de ${esc(x.id)}"></progress>
@@ -134,17 +137,17 @@ async function renderReview(main,all=false,page=1){
  const modules=[...new Set(visible.map(x=>x.moduleId))];const arrays=await Promise.all(modules.map(id=>loadAdminQuestions(id)));const lookup=new Map(arrays.flat().map(q=>[q.id,q]));
  const found=visible.map(item=>({entry:item,q:lookup.get(item.id)}));
  if(found.some(x=>!x.q))throw Error('Uma questão do histórico não está no catálogo atual. Os dados foram preservados.');
- main.innerHTML=`${title('Revisão das questões erradas')}${linkNav}${note}
+ main.innerHTML=`${title('Revisões programadas')}${linkNav}${note}
  <div class="stats">${stat(stats.wrongQuestions,'Questões com erro anterior')}${stat(stats.due,'Revisões vencidas')}</div>
  <div class="inline-actions">${a('treino-admin/revisao','Vencidas')}${a('treino-admin/revisao/todas','Todos os erros')}</div>
- ${found.length?found.map((x,i)=>bankItem(x.q,i+1,st,{review:true})).join(''):'<div class="panel"><p>Nenhuma questão nesta lista. Os erros receberão novas datas de revisão após cada tentativa.</p></div>'}
+ ${found.length?found.map((x,i)=>bankItem(x.q,i+1,st,{review:true})).join(''):'<div class="panel"><p>Nenhuma revisão nesta lista. Exercícios podem agendar revisões por autoavaliação, inclusive após acertos com dúvida.</p></div>'}
  ${entries.length>5?`<nav class="preview-pagination" aria-label="Páginas de revisão">${currentPage>1?a(`treino-admin/revisao/${all?'todas':'vencidas'}/${currentPage-1}`,'← Anterior'):''}<span>Página ${currentPage} de ${pages}</span>${currentPage<pages?a(`treino-admin/revisao/${all?'todas':'vencidas'}/${currentPage+1}`,'Próxima →'):''}</nav>`:''}`;
 }
 function renderStats(main){
  const st=snapshot(),tot=summarizeTraining(st);
  main.innerHTML=`${title('Estatísticas da nova área')}${linkNav}${note}
- <div class="stats">${stat(tot.distinct,'Questões distintas')}${stat(tot.attempts,'Tentativas registradas')}${stat(tot.accuracy===null?'—':`${tot.accuracy}%`,'Taxa de acerto')}${stat(tot.simulations,'Simulados concluídos')}</div>
- <h2>Atividade por módulo</h2><div class="module-list">${Object.entries(tot.modules).sort(([a],[b])=>a.localeCompare(b)).map(([id,m])=>`<div class="module-item"><strong>${esc(id)}</strong><small>${m.distinct} questões · ${m.attempts} tentativas · ${m.attempts?Math.round(m.correct*100/m.attempts):0}% de acerto · ${m.due} revisões vencidas</small></div>`).join('')||'<p>Nenhuma questão respondida nesta área ainda.</p>'}</div>
+ <div class="stats">${stat(tot.distinct,'Questões distintas')}${stat(tot.attempts,'Tentativas registradas')}${stat(tot.accuracy===null?'—':`${tot.accuracy}%`,'Taxa de acerto')}${stat(tot.simulations,'Simulados concluídos')}${stat(tot.bySource?.exercise??0,'Tentativas em exercícios')}${stat(tot.bySource?.bank??0,'Tentativas no Banco')}${stat(tot.bySource?.review??0,'Tentativas em revisão')}</div>
+ <p class="notice">Exercícios, Banco, revisão e simulados usam a mesma coleção de questões por ID. Os pontos pedagógicos por módulo são exibidos na área de estudo, sem somar novamente tentativas de um mesmo item.</p><h2>Atividade por módulo</h2><div class="module-list">${Object.entries(tot.modules).sort(([a],[b])=>a.localeCompare(b)).map(([id,m])=>`<a class="module-item" href="#estudo/administracao/${esc(id)}"><strong>${esc(id)}</strong><small>${m.distinct} questões · ${m.attempts} tentativas · ${m.attempts?Math.round(m.correct*100/m.attempts):0}% de acerto · ${m.due} revisões vencidas</small></a>`).join('')||'<p>Nenhuma questão respondida nesta área ainda.</p>'}</div>
  <div class="panel"><h2>Exportação manual</h2><p>Baixe uma cópia do histórico desta nova área. A importação controlada de tentativas antigas está em Históricos; restauração por arquivo e sincronização entre dispositivos ainda não estão disponíveis. Não limpe os dados do navegador.</p><button class="btn btn-primary" type="button" data-train-action="export">Exportar cópia do histórico</button></div>`;
 }
 let pendingLegacyImport=null;

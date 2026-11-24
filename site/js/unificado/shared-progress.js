@@ -1,17 +1,19 @@
 /** Fase 8B — Aproveitamento do módulo com overlay de evidências do motor novo.
  * Sempre há UMA fonte de base (importada, legado ou nenhuma). Atividades novas
  * substituem o estado efetivo da mesma etapa; não são somadas como duplicatas.
- * Exercícios e Banco continuam congelados na fonte original até a Fase 8C.
+ * Exercícios e Banco têm critérios conservadores de atualização na Fase 8C.
  */
 import {calculatePartialAchievement} from './admin-pedagogy.js';
 import {validateSharedActivityState} from './shared-activity-store.js';
+import {summarizeTraining} from './training-engine.js';
+import {exerciseSessionSummary} from './shared-exercise-engine.js';
 const ratings={sei:100,duvida:50,nao:0};
 const own=(o,k)=>Object.prototype.hasOwnProperty.call(o,k);
 const obj=x=>x!==null&&typeof x==='object'&&!Array.isArray(x);
 const pct=(a,b)=>b?100*a/b:0;
 export const ratingText=x=>({sei:'Eu sei',duvida:'Tenho dúvida',nao:'Não sei'}[x]??'Pendente');
 
-export function calculateSharedModuleProgress(bundle,baselineProgress,baseAchievement,overlay){
+export function calculateSharedModuleProgress(bundle,baselineProgress,baseAchievement,overlay,{training=null,questions=[]}={}){
  validateSharedActivityState(overlay,bundle.subjectId);
  const moduleId=bundle.moduleId;
  const base=obj(baselineProgress)?baselineProgress:{};
@@ -45,12 +47,37 @@ export function calculateSharedModuleProgress(bundle,baselineProgress,baseAchiev
    const old=oldComponents[kind];
    if(old?.available===true)components[kind]={available:true,score:old.score,coverage:old.coverage};
  }
+ // Fase 8C: exercícios novos substituem somente a ETAPA exercícios, com
+ // evidência proporcional da sessão. Nunca somamos pontos a uma nota herdada.
+ const liveExercise=training?exerciseSessionSummary(training,moduleId,questions):null;
+ const exerciseChanged=!!liveExercise&&liveExercise.answered>0;
+ if(exerciseChanged){components.exercises={available:true,
+   score:pct(liveExercise.correct,liveExercise.answered),
+   coverage:pct(liveExercise.answered,liveExercise.total)};}
+ // Só computa Banco novo se não houver Banco herdado. Sem histórico individual
+ // antigo na cópia F7C, misturar médias criaria duplicações silenciosas.
+ const lookup=new Map(questions.map(q=>[q.id,q]));
+ const newBank=training?Object.entries(training.questions).filter(([id,record])=>
+   record.moduleId===moduleId&&lookup.has(id)&&record.history.some(h=>h.source==='bank')
+   ).map(([id,record])=>({id,
+     attempt:record.history.filter(h=>h.source==='bank').at(-1)})).filter(x=>
+     Number.isInteger(x.attempt?.answer)&&x.attempt.answer>=0&&x.attempt.answer<lookup.get(x.id).options.length):[];
+ let liveBank=null;
+ if(newBank.length){
+   const correct=newBank.filter(x=>x.attempt.answer===lookup.get(x.id).answer).length;
+   liveBank={answered:newBank.length,correct,score:pct(correct,newBank.length),
+     applied:!components.bank?.available};
+   if(liveBank.applied)components.bank={available:true,score:liveBank.score,coverage:100};
+ }
+ const trainingTotals=training?summarizeTraining(training):null;
+ const moduleTraining=trainingTotals?.modules?.[moduleId]??null;
  // Sem nova evidência, mantém os resultados herdados exatos, inclusive critérios
  // de sessões antigas aceitos pelo índice da Fase 7C.
- const result=changedIds.size?calculatePartialAchievement(components):
+ const result=changedIds.size||exerciseChanged||liveBank?.applied?calculatePartialAchievement(components):
    (baseAchievement??calculatePartialAchievement({}));
- return {...result,moduleId,sourceChanged:changedIds.size>0,
+ return {...result,moduleId,sourceChanged:changedIds.size>0||exerciseChanged||!!liveBank?.applied,
    evidence:{diagnostics:diagRated,diagnosticsTotal:bundle.diagnostic.length,
      lessonsDone,lessonsRated,lessonsTotal:lessonIds.length},subtopics:entries,
-   frozenStages:['exercises','bank']};
+   liveExercise,liveBank,trainingMetrics:moduleTraining,
+   frozenStages:[...(exerciseChanged?[]:['exercises']),...(components.bank?.available&&!liveBank?.applied?['bank']:[])]};
 }

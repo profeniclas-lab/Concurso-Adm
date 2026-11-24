@@ -55,6 +55,12 @@ node scripts/build-admin-shared-bundles.mjs dist/administracao
 node scripts/audit-phase7e-parity.mjs dist/administracao
 # Fase 8B: confere o novo aproveitamento com o motor original, inclusive registros nativos.
 node scripts/audit-phase8b-parity.mjs dist/administracao
+# Fase 8C: exercícios, banco, revisões e simulados no mesmo histórico de IDs.
+node scripts/audit-phase8c-integration.mjs dist/administracao
+if [[ ! -s dist/administracao/catalogo-leve/auditoria-fase8c.json ]]; then
+  echo 'ERRO: auditoria da Fase 8C ausente.' >&2
+  exit 1
+fi
 if [[ ! -s dist/administracao/catalogo-leve/auditoria-fase8b.json ]]; then
   echo 'ERRO: relatório de paridade Fase 8B ausente.' >&2
   exit 1

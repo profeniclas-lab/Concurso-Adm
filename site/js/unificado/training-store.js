@@ -16,7 +16,7 @@ export function createTrainingStore(subjectId){
     }catch(error){return {ok:false,message:`Histórico preservado; nenhuma gravação será feita. ${error.message}`};}
   }
   /** CAS otimista: verifica valor lido antes de escrever, evitando sobrescrita silenciosa. */
-  function update(mutator,storage=globalThis.localStorage){
+  function update(mutator,storage=globalThis.localStorage,guard=null){
     const before=read(storage);if(!before.ok)return before;
     try{
       const state=JSON.parse(JSON.stringify(before.state));
@@ -25,6 +25,8 @@ export function createTrainingStore(subjectId){
       if(storage.getItem(key)!==before.raw)throw Error('Dados alterados em outra aba. Atualize a página antes de continuar.');
       state.metadata.updatedAt=new Date().toISOString();
       const serialized=JSON.stringify(state);
+      if(typeof guard==='function')guard(storage);
+      if(storage.getItem(key)!==before.raw)throw Error('O histórico mudou antes da gravação; atualize a página.');
       storage.setItem(key,serialized);
       if(storage.getItem(key)!==serialized)throw Error('Gravação não confirmada.');
       return {ok:true,state,result};

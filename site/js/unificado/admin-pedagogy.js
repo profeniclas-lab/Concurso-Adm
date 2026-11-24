@@ -7,6 +7,7 @@ import {readLegacyState,validateLegacyState} from './legacy-compat.js';
 import {EXISTING_ADM_KEY} from './storage-keys.js';
 import {trainingKeyFor} from './training-store.js';
 import {ADMIN_SHARED_ACTIVITY_KEY,readSharedActivityState,hasSharedActivity} from './shared-activity-store.js';
+import {readTrainingState} from './training-store.js';
 
 export const PEDAGOGY_FORMAT='estudo-concursos/admin-pedagogy-index/v1';
 export const PEDAGOGY_STORAGE_KEY='estudoConcursos.v1.pedagogy.administracao';
@@ -14,6 +15,10 @@ export const PEDAGOGY_RECOVERY_KEY='estudoConcursos.v1.pedagogy-recovery.adminis
 export const PEDAGOGY_SNAPSHOT_FORMAT='estudo-concursos/admin-pedagogy-snapshot/v1';
 export const PEDAGOGY_BACKUP_FORMAT='estudo-concursos/pedagogy-safety-backup/v1';
 const TRAINING_KEY=trainingKeyFor('administracao');
+function hasNativeExerciseSession(storage){
+ const current=readTrainingState(storage);if(!current.ok)throw Error(current.message);
+ return Object.keys(current.state.exerciseSessions??{}).length>0;
+}
 const ratings={sei:100,duvida:50,nao:0};
 const weights={diagnostic:20,lessonCompletion:15,lessonSelfAssessment:15,exercises:30,bank:20};
 const object=x=>x!==null&&typeof x==='object'&&!Array.isArray(x);
@@ -195,7 +200,7 @@ export function preparePedagogyImport(index,{storage=globalThis.localStorage,now
   if(snap.exists)throw Error('Já existe uma importação pedagógica. Ela foi preservada; não há sobrescrita automática.');
   const shared=readSharedActivityState('administracao',storage);
   if(!shared.ok)throw Error(shared.message);
-  if(shared.exists&&hasSharedActivity(shared.state))throw Error('Existem atividades novas da Fase 8B. A importação pedagógica antiga precisa ser reconciliada antes de continuar.');
+  if((shared.exists&&hasSharedActivity(shared.state))||hasNativeExerciseSession(storage))throw Error('Existem atividades nativas da Fase 8B ou Fase 8C. A importação pedagógica antiga exige reconciliação antes de continuar.');
   if(storage.getItem(PEDAGOGY_RECOVERY_KEY)!==null)throw Error('Há uma recuperação pedagógica pendente; resolva-a antes de importar.');
   const trainingRaw=storage.getItem(TRAINING_KEY);
   return {plan:planPedagogyImport(old.state,index,{now}),legacyRaw:old.raw,trainingRaw,
@@ -209,7 +214,7 @@ export function commitPedagogyImport(draft,{storage=globalThis.localStorage,back
   try{
     const shared=readSharedActivityState('administracao',storage);
     if(!shared.ok)throw Error(shared.message);
-    if(shared.exists&&hasSharedActivity(shared.state))throw Error('Atividades novas da Fase 8B impedem a importação automática.');
+    if((shared.exists&&hasSharedActivity(shared.state))||hasNativeExerciseSession(storage))throw Error('Atividades novas da Fase 8B ou Fase 8C impedem a importação automática.');
     if(storage.getItem(PEDAGOGY_RECOVERY_KEY)!==null||storage.getItem(PEDAGOGY_STORAGE_KEY)!==draft.pedagogyRaw)
       throw Error('Já existe uma cópia de recuperação ou registro pedagógico.');
     if(storage.getItem(EXISTING_ADM_KEY)!==draft.legacyRaw||storage.getItem(TRAINING_KEY)!==draft.trainingRaw)
@@ -242,7 +247,7 @@ export function restorePedagogyImport({storage=globalThis.localStorage,confirmed
     // Não desfazer a base importada enquanto existirem aulas/diagnósticos novos vinculados a ela.
     const shared=readSharedActivityState('administracao',storage);
     if(!shared.ok)throw Error(shared.message);
-    if(shared.exists&&hasSharedActivity(shared.state))throw Error('Já existem atividades da Fase 8B vinculadas à cópia pedagógica. Salve o backup e reconcilie antes de desfazer a importação.');
+    if((shared.exists&&hasSharedActivity(shared.state))||hasNativeExerciseSession(storage))throw Error('Já existem atividades da Fase 8B ou Fase 8C vinculadas à cópia pedagógica. Salve o backup e reconcilie antes de desfazer a importação.');
     const raw=storage.getItem(PEDAGOGY_RECOVERY_KEY);if(raw===null)throw Error('Sem recuperação pendente.');
     const item=JSON.parse(raw);if(item.format!=='estudo-concursos/pedagogy-recovery/v1')throw Error('Formato incompatível.');
     const current=storage.getItem(PEDAGOGY_STORAGE_KEY);

@@ -6,6 +6,7 @@ import {getSubject} from './subjects.js';
 import {readSharedBaseline,buildSharedStudyView} from './shared-activity-bridge.js';
 import {saveSharedActivity} from './shared-activity-store.js';
 import {ratingText} from './shared-progress.js';
+import {renderSharedExercises,handleSharedExerciseClick} from './shared-exercise-ui.js';
 const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":"&#39;"}[c]));
 const text=x=>esc(x).replace(/\n/g,'\n');
 const nav=(id,mod)=>`#estudo/${encodeURIComponent(id)}/${encodeURIComponent(mod)}`;
@@ -72,8 +73,11 @@ function progressNotice(view,subjectId){
  const revised=x.sourceChanged?' · com atualizações feitas neste motor':' · sem alterações no motor compartilhado';
  return `<section class="panel shared-achievement"><h2>Aproveitamento do módulo</h2>
  <strong>${esc(points)}</strong> <span class="state ${x.completed?'live':''}">${x.completed?'Meta de 75 atingida':'Meta: 75 pontos'}</span>
- <p class="small muted">Base: ${esc(source)}${revised}. Cada diagnóstico ou aula aparece uma única vez, sem duplicação. As etapas de exercícios (até 30 pontos) e Banco (até 20 pontos) permanecem herdadas, sem novas contribuições, até a Fase 8C.</p>
+ <p class="small muted">Base: ${esc(source)}${revised}. Cada diagnóstico ou aula aparece uma única vez, sem duplicação. Exercícios novos substituem a etapa Exercícios na nota; o Banco é calculado pelo treino novo somente quando não existe pontuação antiga equivalente. Se houver Banco herdado, os resultados novos aparecem separados para evitar duplicações.</p>
  <p class="small muted">Diagnósticos: ${x.evidence.diagnostics}/${x.evidence.diagnosticsTotal} · Aulas concluídas: ${x.evidence.lessonsDone}/${x.evidence.lessonsTotal} · Autoavaliações: ${x.evidence.lessonsRated}/${x.evidence.lessonsTotal}</p>
+ ${x.liveExercise?`<p class="small muted">Exercícios atuais: ${x.liveExercise.answered}/${x.liveExercise.total} respondidos · ${x.liveExercise.correct} acertos.</p>`:''}
+ ${x.liveBank?`<p class="small muted">Banco no treino: ${x.liveBank.answered} questões · ${Math.round(x.liveBank.score)}% de acerto${x.liveBank.applied?' · incluído na nota':' · nota antiga preservada'}.</p>`:''}
+ ${x.trainingMetrics?`<p class="small muted">Histórico compartilhado de questões: ${x.trainingMetrics.distinct} distintas, ${x.trainingMetrics.attempts} tentativas, ${x.trainingMetrics.due} revisões vencidas.</p>`:''}
  <a class="btn" href="#treino-admin/auditoria">Exportar backup completo antes de avançar</a></section>`;
 }
 export async function renderSharedModule(route,main,isCurrent=()=>true,loader=loadSharedModule,viewLoader=buildSharedStudyView){
@@ -86,14 +90,15 @@ export async function renderSharedModule(route,main,isCurrent=()=>true,loader=lo
  if(!isCurrent())return;
  const base=nav(subjectId,moduleId);
  const content=screen==='inicio'&&route.length===3?indexView(bundle,view):
+   screen==='exercicios'&&route.length===4?await renderSharedExercises(bundle,view):
    screen==='aula'&&route.length===5?lessonView(bundle,Number(index),view):
    screen==='diagnostico'&&route.length===5?diagnosticView(bundle,Number(index),view):null;
  if(content===null)throw Error('Página do módulo inválida.');
  const actions=subjectId==='administracao'
-   ?`<a class="btn" href="#treino-admin/modulo/${esc(moduleId)}">Histórico herdado</a><a class="btn btn-primary" href="#treino-admin/banco/${esc(moduleId)}/1">Responder questões</a>`
+   ?`<a class="btn" href="#treino-admin/modulo/${esc(moduleId)}">Histórico herdado</a><a class="btn btn-primary" href="${base}/exercicios">Exercícios</a><a class="btn" href="#treino-admin/banco/${esc(moduleId)}/1">Banco de questões</a><a class="btn" href="#treino-admin/revisao">Revisão</a><a class="btn" href="#treino-admin/simulado">Simulados</a><a class="btn" href="#treino-admin/estatisticas">Estatísticas</a>`
    :`<a class="btn" href="#materia/${esc(subjectId)}">Voltar à disciplina</a>`;
  const targetMain=main;
- if(isCurrent())targetMain.innerHTML=`<div class="section-head"><div><p class="eyebrow">Motor compartilhado · Fase 8B</p><h1>${esc(bundle.moduleId)} — ${esc(bundle.title)}</h1></div>
+ if(isCurrent())targetMain.innerHTML=`<div class="section-head"><div><p class="eyebrow">Motor compartilhado · Fase 8C</p><h1>${esc(bundle.moduleId)} — ${esc(bundle.title)}</h1></div>
  <a class="btn" href="${base}">← Índice do módulo</a></div>
  <div class="inline-actions">${actions}</div>${progressNotice(view,subjectId)}${content}`;
 }
@@ -102,13 +107,18 @@ let busy=false;
 export async function handleSharedModuleClick(event,rerender,{
  loader=loadSharedModule,storage=globalThis.localStorage,baselineReader=readSharedBaseline,viewLoader=buildSharedStudyView
 }={}){
- const btn=event.target?.closest?.('button[data-shared-action]');if(!btn)return false;
+ const btn=event.target?.closest?.('button[data-shared-action],button[data-shared-exercise]');if(!btn)return false;
  if(busy)return true;busy=true;btn.disabled=true;
  try{
   const hash=globalThis.location?.hash??'';
   const route=decodeURIComponent(hash.slice(1)).split('/');
   const [,subjectId,moduleId,screen,index]=route;
-  if(route[0]!=='estudo'||!getSubject(subjectId)||route.length!==5)throw Error('Abra uma aula ou diagnóstico para registrar a atividade.');
+  if(route[0]!=='estudo'||!getSubject(subjectId))throw Error('Abra um módulo válido.');
+  if(btn.dataset.sharedExercise){
+    if(route.length!==4||screen!=='exercicios')throw Error('Abra os exercícios do módulo.');
+    await handleSharedExerciseClick(event,rerender,{storage,viewLoader});return true;
+  }
+  if(route.length!==5)throw Error('Abra uma aula ou diagnóstico para registrar a atividade.');
   if(subjectId!=='administracao')throw Error('A gravação desta disciplina ainda não foi ativada no motor compartilhado.');
   const bundle=await loader(subjectId,moduleId);
   if((globalThis.location?.hash??'')!==hash)throw Error('Você mudou de módulo durante a gravação. Resposta não salva.');

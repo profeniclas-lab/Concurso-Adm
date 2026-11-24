@@ -8,11 +8,12 @@ const isObj = v => v !== null && typeof v === 'object' && !Array.isArray(v);
 export function createTrainingState(now = new Date().toISOString(),subjectId='administracao') {
   if(!SUBJECT_ID.test(subjectId))throw Error('Identificador de disciplina inválido.');
   return {schemaVersion:TRAINING_SCHEMA_VERSION, subjectId,
-    metadata:{createdAt:now,updatedAt:null},questions:{},session:null,simulations:[]};
+    metadata:{createdAt:now,updatedAt:null},questions:{},session:null,simulations:[],exerciseSessions:{}};
 }
 export function validateTrainingState(state,expectedSubjectId=null) {
   if (!isObj(state) || state.schemaVersion!==TRAINING_SCHEMA_VERSION || !SUBJECT_ID.test(state.subjectId) || (expectedSubjectId!==null&&state.subjectId!==expectedSubjectId) ||
-      !isObj(state.questions) || !Array.isArray(state.simulations) || !(state.session===null || isObj(state.session)))
+      !isObj(state.questions) || !Array.isArray(state.simulations) || !(state.session===null || isObj(state.session)) ||
+      (state.exerciseSessions!==undefined&&!isObj(state.exerciseSessions)))
     throw Error('Histórico da nova área incompatível. Salvamento bloqueado; os dados foram preservados.');
   if (!isObj(state.metadata)) throw Error('Metadados do treino inválidos.');
   for(const [id, item] of Object.entries(state.questions)) {
@@ -37,7 +38,7 @@ const addDays=(iso,days)=>new Date(Date.parse(iso)+days*86400000).toISOString();
 /** Intervalos simples da área nova, NÃO substituem a revisão adaptativa antiga. */
 export function recordTrainingAttempt(state,question,selected,{source='bank',now=new Date().toISOString()}={}) {
   validateTrainingState(state);validateQuestion(question);
-  if(!['bank','review','exam'].includes(source) || !Number.isInteger(selected) || selected<0 || selected>=question.options.length || !Number.isFinite(Date.parse(now)))
+  if(!['bank','review','exam','exercise'].includes(source) || !Number.isInteger(selected) || selected<0 || selected>=question.options.length || !Number.isFinite(Date.parse(now)))
     throw Error('Tentativa inválida.');
   const prev=state.questions[question.id];
   if(prev && prev.moduleId!==question.moduleId)throw Error('Questão mudou de módulo; operação bloqueada.');
@@ -57,21 +58,23 @@ export function recordTrainingAttempt(state,question,selected,{source='bank',now
 export function summarizeTraining(state,{now=new Date().toISOString()}={}) {
   validateTrainingState(state);
   const items=Object.entries(state.questions);
-  const totals={distinct:items.length,attempts:0,correct:0,wrongQuestions:0,due:0,simulations:state.simulations.length,modules:{}};
+  const totals={distinct:items.length,attempts:0,correct:0,wrongQuestions:0,due:0,simulations:state.simulations.length,modules:{},
+    bySource:{bank:0,review:0,exam:0,exercise:0}};
   for(const [,r] of items){
     totals.attempts+=r.attempts;totals.correct+=r.correct;
+    for(const h of r.history)if(Object.hasOwn(totals.bySource,h?.source))totals.bySource[h.source]++;
     if(r.everWrong)totals.wrongQuestions++;
-    if(r.everWrong && r.dueAt && r.dueAt<=now)totals.due++;
+    if((r.everWrong||r.reviewEligible) && r.dueAt && r.dueAt<=now)totals.due++;
     const m=totals.modules[r.moduleId]??={distinct:0,attempts:0,correct:0,due:0};
     m.distinct++;m.attempts+=r.attempts;m.correct+=r.correct;
-    if(r.everWrong && r.dueAt && r.dueAt<=now)m.due++;
+    if((r.everWrong||r.reviewEligible) && r.dueAt && r.dueAt<=now)m.due++;
   }
   totals.accuracy=totals.attempts?Math.round(100*totals.correct/totals.attempts):null;
   return totals;
 }
 export function reviewEntries(state,{dueOnly=true,now=new Date().toISOString()}={}) {
   validateTrainingState(state);
-  return Object.entries(state.questions).filter(([,r])=>r.everWrong && r.dueAt && (!dueOnly || r.dueAt<=now))
+  return Object.entries(state.questions).filter(([,r])=>(r.everWrong||r.reviewEligible) && r.dueAt && (!dueOnly || r.dueAt<=now))
     .map(([id,r])=>({id,moduleId:r.moduleId,dueAt:r.dueAt,attempts:r.attempts,streak:r.streak}))
     .sort((a,b)=>a.dueAt.localeCompare(b.dueAt)||a.id.localeCompare(b.id));
 }
