@@ -1,6 +1,7 @@
 /** Fase 6 — telas de treino do portal. Não importam o motor legado nem seus dados. */
 import {loadAdminCatalog,loadAdminQuestions} from './admin-catalog.js';
 import {readTrainingState,updateTrainingState} from './training-store.js';
+import {readLegacyState,compareHistories,buildDualHistorySnapshot} from './legacy-compat.js';
 import {TRAINING_KEY,recordTrainingAttempt,summarizeTraining,reviewEntries,
   selectExamQuestions,createExam,answerExam,navigateExam,finishExam} from './training-engine.js';
 const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":"&#39;"}[c]));
@@ -14,7 +15,7 @@ const errorState=r=>{if(!r.ok)throw Error(r.message||'Não foi possível carrega
 const snapshot=()=>errorState(readTrainingState());
 const note='<p class="notice" role="note"><strong>Área nova de treino:</strong> as respostas aqui são salvas separadamente, na chave <code>estudoConcursos.v1.training.administracao</code>. O progresso do ADM-ESTUDO original não é alterado nem somado automaticamente. Use o backup desta área antes de trocar de navegador.</p>';
 const stat=(val,label)=>`<div class="stat"><strong class="stat-value">${esc(val)}</strong><span class="stat-label">${esc(label)}</span></div>`;
-const linkNav=`<nav class="training-nav" aria-label="Atividades do novo motor">${a('treino-admin','Painel')}${a('treino-admin/modulos','Banco de questões')}${a('treino-admin/simulado','Simulados')}${a('treino-admin/revisao','Revisão')}${a('treino-admin/estatisticas','Estatísticas')}</nav>`;
+const linkNav=`<nav class="training-nav" aria-label="Atividades do novo motor">${a('treino-admin','Painel')}${a('treino-admin/modulos','Banco de questões')}${a('treino-admin/simulado','Simulados')}${a('treino-admin/revisao','Revisão')}${a('treino-admin/estatisticas','Estatísticas')}${a('treino-admin/compatibilidade','Históricos')}</nav>`;
 const answers=q=>q.options.map((option,i)=>`<button class="choice" type="button" data-train-action="bank-answer" data-qid="${esc(q.id)}" data-selected="${i}">${alphabet(i)}. ${esc(option)}</button>`).join('');
 const explain=q=>`<div class="feedback"><strong>Gabarito: ${alphabet(q.answer)} — ${esc(q.options[q.answer])}</strong>${q.explanation?`<p>${esc(q.explanation)}</p>`:''}${q.examTip?`<p><strong>Dica:</strong> ${esc(q.examTip)}</p>`:''}</div>`;
 function bankItem(q,index,state,{review=false}={}){
@@ -87,6 +88,32 @@ function renderStats(main){
  <h2>Atividade por módulo</h2><div class="module-list">${Object.entries(tot.modules).sort(([a],[b])=>a.localeCompare(b)).map(([id,m])=>`<div class="module-item"><strong>${esc(id)}</strong><small>${m.distinct} questões · ${m.attempts} tentativas · ${m.attempts?Math.round(m.correct*100/m.attempts):0}% de acerto · ${m.due} revisões vencidas</small></div>`).join('')||'<p>Nenhuma questão respondida nesta área ainda.</p>'}</div>
  <div class="panel"><h2>Exportação manual</h2><p>Baixe uma cópia do histórico desta nova área. A importação e a sincronização com outros dispositivos ainda não estão disponíveis; não limpe este navegador até essas funções serem implementadas.</p><button class="btn btn-primary" type="button" data-train-action="export">Exportar cópia do histórico</button></div>`;
 }
+function renderCompatibility(main) {
+ const old=readLegacyState();
+ const modern=snapshot();
+ if(!old.ok){
+  main.innerHTML=`${title('Compatibilidade dos históricos')}${linkNav}<div class="notice error" role="alert">O histórico do ADM-ESTUDO não pôde ser interpretado: ${esc(old.message)}. Nenhuma gravação ou migração foi feita.</div><p>Faça um backup pelo aplicativo original antes de qualquer tentativa de migração. Você também pode exportar as cópias brutas, mesmo quando o arquivo antigo não puder ser lido:</p><button class="btn btn-primary" type="button" data-train-action="dual-export">Exportar cópia dos dois históricos</button>`;
+  return;
+ }
+ const report=compareHistories(old.state,modern);
+ const left=report.legacy;
+ const missing='<span class="muted">Não encontrado neste navegador</span>';
+ main.innerHTML=`${title('Compatibilidade dos históricos','Conferência segura dos dois motores, sem alterar seus registros')}${linkNav}
+ <p class="notice" role="note"><strong>Somente leitura:</strong> nenhuma resposta será transferida nesta fase. Os dois históricos continuam independentes. A contagem unificada considera IDs de questões, sem duplicar as presentes nos dois aplicativos.</p>
+ <section class="stats" aria-label="Questões distintas em ambos os aplicativos">
+ ${stat(report.distinctUnion,'Questões distintas nos dois históricos')}
+ ${stat(report.oldOnly,'Apenas no ADM-ESTUDO')}
+ ${stat(report.newOnly,'Apenas no novo motor')}
+ ${stat(report.overlap,'Presentes nos dois históricos')}</section>
+ <div class="training-actions">
+ <article class="panel"><h2>ADM-ESTUDO original</h2>${left?
+ `<p><strong>${left.distinct}</strong> questões distintas respondidas.</p><p>${left.trackedAttempts} tentativas com registro explícito · ${left.lessons} aulas concluídas · ${left.diagnosticModules} módulos com diagnóstico.</p><p>${left.simulations} simulados concluídos · ${left.due} revisões de questões vencidas, dentre ${left.scheduledReviews} agendadas.</p>`:missing}</article>
+ <article class="panel"><h2>Novo motor</h2><p><strong>${report.modern.distinct}</strong> questões distintas respondidas.</p><p>${report.modern.attempts} tentativas registradas · ${report.modern.simulations} simulados concluídos.</p><p>${report.modern.due} revisões vencidas, dentre ${report.modern.scheduledReviews} questões agendadas para revisão.</p></article></div>
+ <section class="panel"><h2>Proteção antes da migração</h2><p>Exporte uma cópia bruta dos dois históricos disponíveis neste navegador. O arquivo contém os registros originais e não é restaurado automaticamente. Guarde-o em local seguro.</p>
+ <button class="btn btn-primary" type="button" data-train-action="dual-export">Exportar cópia dos dois históricos</button></section>
+ <section class="panel"><h2>O que ainda não está unificado</h2><ul>${report.limitations.map(v=>`<li>${esc(v)}</li>`).join('')}</ul><p>Se você estudou em outro navegador ou aparelho, os dados antigos podem não estar presentes aqui. Este painel não os procura automaticamente no Google Drive.</p></section>`;
+}
+
 export async function renderAdminTraining(route,main,isCurrent=()=>true){
  if(!isCurrent())return;
  // Captura a referência original antes de usar um adaptador com setter.
@@ -100,6 +127,7 @@ export async function renderAdminTraining(route,main,isCurrent=()=>true){
  if(route[1]==='simulado' && route.length===2)return renderExam(main);
  if(route[1]==='revisao' && route.length>=2 && route.length<=4 && (!route[2]||['todas','vencidas'].includes(route[2]))){const page=route[3]?Number(route[3]):1;if(!Number.isInteger(page)||page<1)throw Error('Página inválida.');return renderReview(main,route[2]==='todas',page);}
  if(route[1]==='estatisticas' && route.length===2)return renderStats(main);
+ if(route[1]==='compatibilidade' && route.length===2)return renderCompatibility(main);
  throw Error('Página de treinamento desconhecida.');
 }
 function update(fn){const r=updateTrainingState(fn);if(!r.ok)throw Error(r.message);return r.result;}
@@ -114,6 +142,15 @@ export async function handleAdminTrainingClick(event,rerender){
  try{
   const route=decodeURIComponent(location.hash.slice(1)).split('/');if(route[0]!=='treino-admin')return true;
   const op=btn.dataset.trainAction;
+  if(op==='dual-export'){
+    if(route[1]!=='compatibilidade')throw Error('Exportação indisponível nesta tela.');
+    const payload=buildDualHistorySnapshot();
+    const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'});
+    const url=URL.createObjectURL(blob);const download=document.createElement('a');
+    download.href=url;download.download=`estudo-concursos-historicos-${new Date().toISOString().slice(0,10)}.json`;
+    document.body.appendChild(download);download.click();download.remove();
+    setTimeout(()=>URL.revokeObjectURL(url),2000);return true;
+  }
   if(op==='export'){
     const st=snapshot();const blob=new Blob([JSON.stringify({format:'estudo-concursos-training-backup/v1',createdAt:new Date().toISOString(),state:st},null,2)],{type:'application/json'});
     const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=`estudo-concursos-treino-adm-${new Date().toISOString().slice(0,10)}.json`;
