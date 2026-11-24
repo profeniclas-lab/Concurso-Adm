@@ -25,3 +25,22 @@ html[data-theme="dark"]{color-scheme:dark;--bg:#121927;--surface:#1b2434;--surfa
 .training-results{margin:12px 0 20px;padding-left:28px;line-height:1.9}
 .training-nav a:focus-visible,.choice:focus-visible,.training-select:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
 @media(max-width:670px){.training-actions{grid-template-columns:1fr}.training-nav{gap:5px}.training-nav .btn{padding:8px 10px;min-height:36px}}
+
+/* Fase 7D — progresso pedagógico por módulo, com métricas de treino separadas. */
+.module-progress-row{cursor:auto}
+.module-progress-heading{display:flex;gap:14px;justify-content:space-between;align-items:flex-start;flex-wrap:wrap}
+.module-progress-heading h2{font-size:1.04rem;margin:0 0 4px;line-height:1.4}
+.module-progress-heading p{margin:0}
+.module-progress-row>p{margin:10px 0 0}
+.module-score{font-size:clamp(24px,4vw,38px);font-weight:750;margin:8px 0}
+.module-score span{font-size:14px;font-weight:400;color:var(--muted)}
+.module-progress-meter{display:block;width:100%;height:12px;accent-color:var(--good);margin:12px 0 14px}
+.module-component-list{border:1px solid var(--line);border-radius:12px;overflow:hidden;margin:14px 0}
+.module-component{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:11px 14px;border-bottom:1px solid var(--line)}
+.module-component:last-child{border-bottom:0}
+.module-component strong{white-space:nowrap;font-variant-numeric:tabular-nums}
+.module-subtopics{display:grid;gap:9px}
+.module-subtopic{border:1px solid var(--line);background:var(--surface-2);border-radius:10px;padding:13px 15px}
+.module-subtopic strong,.module-subtopic small{display:block}
+.module-subtopic p{margin:6px 0 0;font-size:13px}
+@media(max-width:580px){.module-component{align-items:flex-start}.module-progress-row .btn{width:100%}}

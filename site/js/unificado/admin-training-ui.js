@@ -5,6 +5,7 @@ import {readLegacyState,compareHistories,buildDualHistorySnapshot} from './legac
 import {prepareLegacyMigration,commitLegacyMigration,inspectMigrationRecovery,restorePreMigration,discardUnappliedRecovery} from './legacy-migration.js';
 import {loadPedagogyIndex,allModulePedagogy,preparePedagogyImport,commitPedagogyImport,
   readPedagogySnapshot,inspectPedagogyRecovery,restorePedagogyImport,buildPedagogyBackup} from './admin-pedagogy.js';
+import {buildAdminModuleProgress,ratingLabel} from './admin-module-progress.js';
 import {TRAINING_KEY,recordTrainingAttempt,summarizeTraining,reviewEntries,
   selectExamQuestions,createExam,answerExam,navigateExam,finishExam} from './training-engine.js';
 const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":"&#39;"}[c]));
@@ -18,7 +19,7 @@ const errorState=r=>{if(!r.ok)throw Error(r.message||'Não foi possível carrega
 const snapshot=()=>errorState(readTrainingState());
 const note='<p class="notice" role="note"><strong>Área nova de treino:</strong> salva em <code>estudoConcursos.v1.training.administracao</code>. A importação de tentativas antigas é opcional, em Históricos. O ADM-ESTUDO original não é alterado. Faça backups antes de trocar de navegador.</p>';
 const stat=(val,label)=>`<div class="stat"><strong class="stat-value">${esc(val)}</strong><span class="stat-label">${esc(label)}</span></div>`;
-const linkNav=`<nav class="training-nav" aria-label="Atividades do novo motor">${a('treino-admin','Painel')}${a('treino-admin/modulos','Banco de questões')}${a('treino-admin/simulado','Simulados')}${a('treino-admin/revisao','Revisão')}${a('treino-admin/estatisticas','Estatísticas')}${a('treino-admin/compatibilidade','Históricos')}${a('treino-admin/pedagogia','Aproveitamento')}</nav>`;
+const linkNav=`<nav class="training-nav" aria-label="Atividades do novo motor">${a('treino-admin','Painel')}${a('treino-admin/modulos','Módulos e questões')}${a('treino-admin/simulado','Simulados')}${a('treino-admin/revisao','Revisão')}${a('treino-admin/estatisticas','Estatísticas')}${a('treino-admin/compatibilidade','Históricos')}${a('treino-admin/pedagogia','Aproveitamento')}</nav>`;
 const answers=q=>q.options.map((option,i)=>`<button class="choice" type="button" data-train-action="bank-answer" data-qid="${esc(q.id)}" data-selected="${i}">${alphabet(i)}. ${esc(option)}</button>`).join('');
 const explain=q=>`<div class="feedback"><strong>Gabarito: ${alphabet(q.answer)} — ${esc(q.options[q.answer])}</strong>${q.explanation?`<p>${esc(q.explanation)}</p>`:''}${q.examTip?`<p><strong>Dica:</strong> ${esc(q.examTip)}</p>`:''}</div>`;
 function bankItem(q,index,state,{review=false}={}){
@@ -35,12 +36,66 @@ async function renderHome(main){
  <section class="stats" aria-label="Resumo da nova área">${stat(m.questionCount,'Questões disponíveis')}${stat(info.distinct,'Questões já praticadas')}${stat(info.accuracy===null?'—':info.accuracy+'%','Acerto por tentativa')}${stat(info.due,'Revisões vencidas')}</section>
  <div class="training-actions"><article class="panel"><h2>Banco de questões</h2><p>Escolha um módulo e responda com correção imediata.</p>${a('treino-admin/modulos','Escolher módulo','btn btn-primary')}</article>
  <article class="panel"><h2>Simulado de 20 questões</h2><p>Treino geral ou por módulo, com retomada se você fechar a página.</p>${a('treino-admin/simulado','Abrir simulados')}</article>
- <article class="panel"><h2>Revisão de erros</h2><p>Organize novas tentativas com intervalos simples.</p>${a('treino-admin/revisao','Revisar erros')}</article></div>`;
+ <article class="panel"><h2>Revisão de erros</h2><p>Organize novas tentativas com intervalos simples.</p>${a('treino-admin/revisao','Revisar erros')}</article>
+ <article class="panel"><h2>Progresso por módulo</h2><p>Consulte o aproveitamento importado e a atividade nova, sem somar as duas notas.</p>${a('treino-admin/modulos','Ver meus módulos')}</article></div>`;
 }
+/**
+ * Fase 7D: resumo por módulo a partir da cópia F7C ou do histórico original.
+ * Nunca escreve e nunca mistura pontos importados com tentativas do treino.
+ */
+async function moduleOverview(){
+ const index=await loadPedagogyIndex();
+ const legacy=readLegacyState(),saved=readPedagogySnapshot();
+ const warnings=[];
+ if(!legacy.ok)warnings.push('O histórico do ADM-ESTUDO está incompatível: '+legacy.message+'; dados preservados.');
+ if(!saved.ok)warnings.push('A cópia pedagógica importada não pôde ser lida: '+saved.message+'; dados preservados.');
+ const overview=buildAdminModuleProgress(index,snapshot(),{
+   legacy:legacy.ok&&legacy.exists?legacy.state:null,
+   imported:saved.ok&&saved.exists?saved.snapshot:null
+ });
+ return {overview,warnings};
+}
+const points=n=>Number(n).toFixed(2).replace('.',',');
+const sourceText=x=>x==='imported'?'cópia pedagógica da Fase 7C':x==='legacy'?'ADM-ESTUDO original (somente leitura)':'nenhum histórico pedagógico disponível';
+const scoreText=x=>x.hasData?`${points(x.earnedWeightedPoints)} de 100 pontos (nota parcial ${x.percentage}%)`:'Sem pontuação registrada';
+const components=[['diagnostic','Diagnóstico'],['lessonCompletion','Aulas concluídas'],['lessonSelfAssessment','Autoavaliação das aulas'],['exercises','Exercícios de aprendizagem'],['bank','Banco de questões original']];
+const warningHtml=items=>items.map(x=>`<p class="notice error" role="alert">${esc(x)}</p>`).join('');
 async function renderModules(main){
- const m=await loadAdminCatalog();const info=summarizeTraining(snapshot());
- main.innerHTML=`${title('Banco de questões por módulo')}${linkNav}${note}
- <div class="module-list">${m.modules.map(x=>`<a class="module-item" href="#treino-admin/banco/${esc(x.id)}/1"><strong>${esc(x.id)} · ${esc(x.title)}</strong><small>${x.count} questões · ${info.modules[x.id]?.distinct??0} já respondidas</small></a>`).join('')}</div>`;
+ const {overview,warnings}=await moduleOverview();
+ main.innerHTML=`${title('Módulos: progresso e questões','27 módulos · atividade pedagógica e treino mostrados separadamente')}${linkNav}${note}
+ ${warningHtml(warnings)}
+ <p class="notice" role="note"><strong>Origem do aproveitamento:</strong> ${esc(sourceText(overview.source))}. A nota pedagógica de 75 pontos <strong>não incorpora</strong> as novas tentativas, e questões iguais não são somadas duas vezes. ${overview.sourceMayBeOlder?'O ADM-ESTUDO original pode ter sido atualizado após a importação.':''}</p>
+ <section class="stats" aria-label="Progresso por módulo">${stat(overview.rows.length,'Módulos disponíveis')}${stat(overview.started,'Módulos com aproveitamento registrado')}${stat(overview.atGoal,'Módulos com meta de 75 pontos')}</section>
+ <div class="module-list">${overview.rows.map(x=>`<article class="module-item module-progress-row">
+ <div class="module-progress-heading"><div><h2>${esc(x.id)} · ${esc(x.title)}</h2><p class="small muted">${x.questionsAvailable} questões cadastradas</p></div><span class="state ${x.completed?'live':''}">${x.completed?'75 pontos atingidos':x.hasData?'Em andamento':'Sem registro'}</span></div>
+ <p><strong>Pedagógico:</strong> ${esc(scoreText(x))}</p>
+ <p class="small muted"><strong>Novo treino:</strong> ${x.training.distinct} questões distintas, ${x.training.attempts} tentativas e ${x.training.due} revisão(ões) vencida(s) — estatísticas independentes.</p>
+ <div class="inline-actions">${a(`treino-admin/modulo/${x.id}`,'Ver progresso e atividades')}${a(`treino-admin/banco/${x.id}/1`,'Responder questões','btn btn-primary')}</div></article>`).join('')}</div>`;
+}
+async function renderAdminModuleDetails(main,moduleId){
+ const {overview,warnings}=await moduleOverview();
+ const x=overview.rows.find(m=>m.id===moduleId);
+ if(!x)throw Error('Módulo administrativo não encontrado no catálogo validado.');
+ const status=x.completed?'Meta de 75 pontos atingida':x.hasData?'Meta ainda não atingida':'Aproveitamento ainda não registrado';
+ main.innerHTML=`${title(`${x.id} — ${x.title}`,'Progresso pedagógico por módulo · Fase 7D')}${linkNav}${warningHtml(warnings)}
+ <div class="inline-actions">${a('treino-admin/modulos','← Todos os módulos')}${a(`treino-admin/banco/${x.id}/1`,'Treinar questões','btn btn-primary')}${a('treino-admin/pedagogia','Gerenciar importação pedagógica')}</div>
+ <p class="notice" role="note"><strong>Fonte da pontuação:</strong> ${esc(sourceText(x.source))}${x.sourceAt?' · referência '+esc(fmt(x.sourceAt)):''}. ${x.source==='imported'?'Esta é uma fotografia do momento da importação; novas atividades não alteram esta nota.':''}${x.sourceMayBeOlder?' O registro original pode ter atividades posteriores.':''}</p>
+ <section class="panel"><h2>Aproveitamento pedagógico</h2>
+ <p class="module-score">${x.hasData?`${points(x.earnedWeightedPoints)} <span>de 100 pontos · ${x.percentage}%</span>`:'— <span>sem atividade pedagógica registrada</span>'}</p>
+ <progress class="module-progress-meter" max="100" value="${x.hasData?x.earnedWeightedPoints:0}" aria-label="Pontos de aproveitamento pedagógico de ${esc(x.id)}"></progress>
+ <p><span class="state ${x.completed?'live':''}">${esc(status)}</span> ${x.hasData?`· Cobertura avaliada: ${points(x.coveragePercentage)}%`:''}</p>
+ <h3>Composição da nota original</h3>
+ <div class="module-component-list">${components.map(([key,label])=>{const c=x.components[key];return `<div class="module-component"><span>${esc(label)} <small class="muted">(peso ${c.weight})</small></span><strong>${points(c.points)} / ${c.weight}</strong></div>`}).join('')}</div>
+ <p class="small muted">A pontuação mantém a regra 20 + 15 + 15 + 30 + 20. O indicador de 75 pontos não é uma média das questões respondidas no motor novo.</p></section>
+ <section class="panel"><h2>Diagnóstico e aulas por subtópico</h2>
+ <div class="module-subtopics">${x.subtopics.map(t=>`<div class="module-subtopic"><strong>${esc(t.title)}</strong><small class="muted">${esc(t.id)}</small>
+ <p>Diagnóstico: ${esc(t.hasDiagnostic?ratingLabel(t.diagnostic):'Indisponível')} · Aula: ${esc(t.hasLesson?(t.lessonCompleted?'Concluída':'Não concluída'):'Indisponível')} · Autoavaliação: ${esc(t.hasLesson?ratingLabel(t.lessonRating):'Indisponível')}</p></div>`).join('')}</div>
+ <p class="small muted">As informações exibidas pertencem à fonte pedagógica indicada acima. A conclusão ou autoavaliação não é deduzida de tentativas de questões.</p></section>
+ <section class="panel"><h2>Exercícios de aprendizagem</h2><p>${x.exerciseSession?`${x.exerciseSession.answered} respostas registradas em ${x.exerciseSession.total} questões da sessão · ${x.exerciseSession.finished?'sessão concluída':'sessão ainda não concluída'}`:'Nenhuma sessão de exercícios importada ou identificada.'}</p></section>
+ <section class="panel"><h2>Questões no novo motor — histórico independente</h2>
+ <div class="stats">${stat(x.training.distinct,'Questões distintas respondidas')}${stat(x.training.attempts,'Tentativas registradas')}${stat(x.training.accuracy===null?'—':x.training.accuracy+'%','Acerto por tentativa')}${stat(x.training.due,'Revisões vencidas')}</div>
+ <p>${x.training.withErrors} questão(ões) com erro registrado neste motor. <strong>Esses resultados não alteram automaticamente os pontos pedagógicos acima.</strong></p>
+ ${a(`treino-admin/banco/${x.id}/1`,'Responder questões deste módulo','btn btn-primary')}</section>`;
 }
 async function renderBank(main,id,page){
  const m=await loadAdminCatalog();const x=m.modules.find(v=>v.id===id);if(!x)throw Error('Módulo inválido.');
@@ -48,7 +103,7 @@ async function renderBank(main,id,page){
  if(!Number.isInteger(page)||page<1||page>pages)throw Error('Página inválida.');
  const first=(page-1)*5;const st=snapshot();
  main.innerHTML=`${title(`${x.id} — ${x.title}`,'Banco de questões com registro de respostas')}${linkNav}${note}
- <div class="inline-actions">${a('treino-admin/modulos','← Todos os módulos')}<span class="state">${qs.length} questões · página ${page}/${pages}</span></div>
+ <div class="inline-actions">${a('treino-admin/modulos','← Todos os módulos')}${a(`treino-admin/modulo/${id}`,'Ver meu progresso')}<span class="state">${qs.length} questões · página ${page}/${pages}</span></div>
  ${qs.slice(first,first+5).map((q,i)=>bankItem(q,first+i+1,st)).join('')}
  <nav class="preview-pagination" aria-label="Páginas">${page>1?a(`treino-admin/banco/${id}/${page-1}`,'← Anterior'):''}<span>Página ${page} de ${pages}</span>${page<pages?a(`treino-admin/banco/${id}/${page+1}`,'Próxima →','btn btn-primary'):''}</nav>`;
 }
@@ -192,6 +247,7 @@ export async function renderAdminTraining(route,main,isCurrent=()=>true){
  main=safeMain;
  if(route.length===1)return renderHome(main);
  if(route[1]==='modulos' && route.length===2)return renderModules(main);
+ if(route[1]==='modulo' && route.length===3)return renderAdminModuleDetails(main,route[2]);
  if(route[1]==='banco'&&route.length===4)return renderBank(main,route[2],Number(route[3]));
  if(route[1]==='simulado' && route.length===2)return renderExam(main);
  if(route[1]==='revisao' && route.length>=2 && route.length<=4 && (!route[2]||['todas','vencidas'].includes(route[2]))){const page=route[3]?Number(route[3]):1;if(!Number.isInteger(page)||page<1)throw Error('Página inválida.');return renderReview(main,route[2]==='todas',page);}

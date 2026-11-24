@@ -39,7 +39,10 @@ export function buildPedagogyIndex(modules,lessons,diagnostics,questions,manifes
     const lessonIds=subtopics.filter(id=>Boolean(lessons[id]));
     const bank=questionByModule.get(mod.id)||[];
     if(bank.length!==manifest.modules.find(m=>m.id===mod.id)?.count)throw Error(`Banco divergente em ${mod.id}`);
-    output.push({id:mod.id,title:mod.title,area:mod.area,subtopicIds:subtopics,diagnosticIds,lessonIds,bank});
+    // F7D: nomes do catálogo original para apresentar os tópicos no novo painel.
+    // Não reescreve aulas, questões, nem o catálogo de origem.
+    const subtopicLabels=mod.subtopics.map(t=>({id:t.id,title:typeof t.title==='string'&&t.title.trim()?t.title:t.id}));
+    output.push({id:mod.id,title:mod.title,area:mod.area,subtopicIds:subtopics,subtopics:subtopicLabels,diagnosticIds,lessonIds,bank});
   }
   if(seen.size!==27||questionByModule.size!==27||output.reduce((n,m)=>n+m.bank.length,0)!==757)
     throw Error('Índice pedagógico não preserva os 27 módulos e 757 questões.');
