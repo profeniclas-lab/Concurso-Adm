@@ -73,10 +73,11 @@ function progressNotice(view,subjectId){
  const revised=x.sourceChanged?' · com atualizações feitas neste motor':' · sem alterações no motor compartilhado';
  return `<section class="panel shared-achievement"><h2>Aproveitamento do módulo</h2>
  <strong>${esc(points)}</strong> <span class="state ${x.completed?'live':''}">${x.completed?'Meta de 75 atingida':'Meta: 75 pontos'}</span>
- <p class="small muted">Base: ${esc(source)}${revised}. Cada diagnóstico ou aula aparece uma única vez, sem duplicação. Exercícios novos substituem a etapa Exercícios na nota; o Banco é calculado pelo treino novo somente quando não existe pontuação antiga equivalente. Se houver Banco herdado, os resultados novos aparecem separados para evitar duplicações.</p>
+ <p class="small muted">Base: ${esc(source)}${revised}. Cada diagnóstico ou aula aparece uma única vez, sem duplicação. Exercícios novos substituem a etapa Exercícios na nota. O Banco pode conciliar respostas antigas e novas por ID quando há evidência e datas verificáveis; caso contrário, a pontuação herdada fica congelada, sem duplicação.</p>
  <p class="small muted">Diagnósticos: ${x.evidence.diagnostics}/${x.evidence.diagnosticsTotal} · Aulas concluídas: ${x.evidence.lessonsDone}/${x.evidence.lessonsTotal} · Autoavaliações: ${x.evidence.lessonsRated}/${x.evidence.lessonsTotal}</p>
  ${x.liveExercise?`<p class="small muted">Exercícios atuais: ${x.liveExercise.answered}/${x.liveExercise.total} respondidos · ${x.liveExercise.correct} acertos.</p>`:''}
- ${x.liveBank?`<p class="small muted">Banco no treino: ${x.liveBank.answered} questões · ${Math.round(x.liveBank.score)}% de acerto${x.liveBank.applied?' · incluído na nota':' · nota antiga preservada'}.</p>`:''}
+ ${x.liveBank?`<p class="small muted">Banco no treino: ${x.liveBank.answered} questões · ${Math.round(x.liveBank.score)}% de acerto${x.liveBank.applied?' · contribuição conciliada na nota':' · nota antiga preservada'}. ${x.liveBank.reason?esc(x.liveBank.reason):''}</p>`:''}
+ ${x.bankReconciliation?.status==='merged'?`<p class="small muted">Banco reconciliado: ${x.bankReconciliation.oldCount} antigas + ${x.bankReconciliation.nativeCount} novas, com ${x.bankReconciliation.overlap} IDs sobrepostos = ${x.bankReconciliation.total} questões distintas.</p>`:''}
  ${x.trainingMetrics?`<p class="small muted">Histórico compartilhado de questões: ${x.trainingMetrics.distinct} distintas, ${x.trainingMetrics.attempts} tentativas, ${x.trainingMetrics.due} revisões vencidas.</p>`:''}
  <a class="btn" href="#treino-admin/auditoria">Exportar backup completo antes de avançar</a></section>`;
 }
@@ -98,7 +99,7 @@ export async function renderSharedModule(route,main,isCurrent=()=>true,loader=lo
    ?`<a class="btn" href="#treino-admin/modulo/${esc(moduleId)}">Histórico herdado</a><a class="btn btn-primary" href="${base}/exercicios">Exercícios</a><a class="btn" href="#treino-admin/banco/${esc(moduleId)}/1">Banco de questões</a><a class="btn" href="#treino-admin/revisao">Revisão</a><a class="btn" href="#treino-admin/simulado">Simulados</a><a class="btn" href="#treino-admin/estatisticas">Estatísticas</a>`
    :`<a class="btn" href="#materia/${esc(subjectId)}">Voltar à disciplina</a>`;
  const targetMain=main;
- if(isCurrent())targetMain.innerHTML=`<div class="section-head"><div><p class="eyebrow">Motor compartilhado · Fase 8C</p><h1>${esc(bundle.moduleId)} — ${esc(bundle.title)}</h1></div>
+ if(isCurrent())targetMain.innerHTML=`<div class="section-head"><div><p class="eyebrow">Motor compartilhado · Fase 8D</p><h1>${esc(bundle.moduleId)} — ${esc(bundle.title)}</h1></div>
  <a class="btn" href="${base}">← Índice do módulo</a></div>
  <div class="inline-actions">${actions}</div>${progressNotice(view,subjectId)}${content}`;
 }

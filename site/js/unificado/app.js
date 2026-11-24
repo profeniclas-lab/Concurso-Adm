@@ -38,14 +38,14 @@ function renderHome(){
  const summaries=subjects.map(readSummary);const lessons=summaries.reduce((n,x)=>n+x.lessons,0);const questions=summaries.reduce((n,x)=>n+x.questions,0);
  main.innerHTML=`<section class="hero"><p class="eyebrow">Seu espaço de preparação</p><h1>Um lugar para todas as matérias do seu concurso.</h1><p>Organize a preparação, mantenha cada disciplina independente e avance no seu ritmo. Administração já possui um ambiente completo de estudo.</p></section>
  <div class="stats" aria-label="Atividade registrada neste navegador"><div class="stat"><strong class="stat-value">${subjects.length}</strong><span class="stat-label">Disciplinas cadastradas</span></div>
- <div class="stat"><strong class="stat-value">${lessons}</strong><span class="stat-label">Aulas concluídas registradas</span></div><div class="stat"><strong class="stat-value">${questions}</strong><span class="stat-label">Questões distintas com histórico</span></div></div>
+ <div class="stat"><strong class="stat-value">${lessons}</strong><span class="stat-label">Aulas concluídas no histórico anterior</span></div><div class="stat"><strong class="stat-value">${questions}</strong><span class="stat-label">Questões distintas do histórico anterior</span></div></div>
  <div class="section-head"><h2>Escolha sua disciplina</h2><span class="muted small">Cada matéria terá módulos e progresso próprios.</span></div>
  <div class="grid">${subjects.map(subjectCard).join('')}</div>
- <p class="small muted">Os números representam apenas registros disponíveis na origem atual do navegador. Não são uma nota de aproveitamento e não são sincronizados automaticamente entre dispositivos.</p>`;
+ <p class="small muted">Os totais acima são indicadores dos históricos anteriores disponíveis neste navegador, não uma soma com as atividades do motor compartilhado. Para conferir o aproveitamento atualizado de Administração, abra a disciplina e escolha “Meu aproveitamento atualizado”. Não há sincronização automática entre dispositivos.</p>`;
 }
 function renderSubjects(){main.innerHTML=`${crumb([{text:'Início',href:'inicio'},{text:'Disciplinas'}])}<div class="section-head"><h2>Todas as disciplinas</h2></div><div class="grid">${subjects.map(subjectCard).join('')}</div>`}
 async function isAdminBundled(){try{const res=await fetch(new URL('./administracao/index.html',location.href),{method:'HEAD',cache:'no-store'});return res.ok && (res.headers.get('content-type')??'').includes('text/html')}catch{return false}}
-async function renderAdmin(subject,token){
+async function renderAdminLegacy(subject,token){
   const local=await isAdminBundled();if(token!==sequence)return;
   main.classList.toggle('workspace',local);
   main.innerHTML=`${crumb([{text:'Início',href:'inicio'},{text:subject.shortTitle}])}
@@ -56,15 +56,46 @@ async function renderAdmin(subject,token){
     `<div class="panel"><h3>Administração já está disponível</h3><p>Esta cópia de teste não inclui os arquivos administrativos. Na publicação pelo GitHub Actions, a versão preservada de <code>Dir-Adm/nova-arquitetura</code> será incorporada automaticamente.</p>
     <p>Enquanto isso, você pode estudar no aplicativo original:</p><a class="btn btn-primary" href="https://profeniclas-lab.github.io/Dir-Adm/" target="_blank" rel="noopener noreferrer">Abrir ADM-ESTUDO original ↗</a></div>`}`;
 }
+/** Fase 8D: motor comum é a entrada principal; a versão antiga permanece
+ * acessível SOMENTE por uma rota explícita, sem apagar arquivos nem histórico.
+ */
+async function renderAdminNative(subject,token){
+ const bundled=await isAdminBundled();if(token!==sequence)return;
+ if(!bundled){
+  main.classList.remove('workspace');
+  main.innerHTML=`${crumb([{text:'Início',href:'inicio'},{text:subject.shortTitle}])}
+  <section class="panel"><h2>Administração — catálogo ainda não incorporado</h2>
+  <p>O build rápido não inclui o pacote administrativo. A publicação via GitHub Actions o inclui.</p>
+  <a class="btn btn-primary" href="https://profeniclas-lab.github.io/Dir-Adm/" target="_blank" rel="noopener noreferrer">Abrir ADM-ESTUDO original</a></section>`;
+  return;
+ }
+ const catalog=await loadAdminCatalog();if(token!==sequence)return;
+ main.classList.remove('workspace');
+ main.innerHTML=`${crumb([{text:'Início',href:'inicio'},{text:subject.shortTitle}])}
+ <section class="hero"><p class="eyebrow">Motor compartilhado · Fase 8D</p>
+ <h1>${esc(subject.title)}</h1><p>Estude aulas e diagnósticos, pratique exercícios e acompanhe questões, revisões e simulados no portal unificado.</p></section>
+ <section class="stats" aria-label="Catálogo administrativo">
+ <div class="stat"><strong class="stat-value">${catalog.moduleCount}</strong><span class="stat-label">Módulos</span></div>
+ <div class="stat"><strong class="stat-value">${catalog.questionCount}</strong><span class="stat-label">Questões preservadas</span></div></section>
+ <div class="inline-actions"><a class="btn btn-primary" href="#treino-admin/visao-unificada/1">Meu aproveitamento atualizado</a>
+ <a class="btn" href="#treino-admin">Banco, revisão e simulados</a>
+ <a class="btn" href="#treino-admin/auditoria">Backup e segurança</a>
+ <a class="btn" href="#materia/administracao/legado">Abrir ADM-ESTUDO original (alternativa)</a></div>
+ <p class="notice" role="note">Transição gradual: o ADM-ESTUDO antigo permanece preservado e pode ser aberto a qualquer momento. As novas atividades não alteram o histórico original. Quando não for possível reconciliar a nota do Banco, ela ficará preservada.</p>
+ <div class="module-list">${catalog.modules.map(m=>`<article class="module-item"><strong>${esc(m.id)} · ${esc(m.title)}</strong>
+ <small>${m.count} questões</small><div class="inline-actions">
+ <a class="btn btn-primary" href="#estudo/administracao/${esc(m.id)}">Estudar módulo</a>
+ <a class="btn" href="#treino-admin/banco/${esc(m.id)}/1">Banco de questões</a></div></article>`).join('')}</div>`;
+}
 /** Visão leve de consulta: não grava respostas nem altera aproveitamento. */
 async function renderAdminModules(token){
  const data=await loadAdminCatalog();if(token!==sequence)return;
  main.innerHTML=`${crumb([{text:'Início',href:'inicio'},{text:'Administração',href:'materia/administracao'},{text:'Questões por módulo'}])}
- <section class="hero"><p class="eyebrow">Consulta rápida</p><h1>Questões de Administração por módulo</h1><p>Escolha um módulo para carregar somente as suas questões. Esta consulta não salva respostas; para treinar com aproveitamento, use o ADM-ESTUDO completo.</p></section>
+ <section class="hero"><p class="eyebrow">Consulta rápida</p><h1>Questões de Administração por módulo</h1><p>Escolha um módulo para consultar as questões sem gravar. Para registrar estudo e acompanhar aproveitamento, utilize o motor compartilhado.</p></section>
  <div class="stats"><div class="stat"><strong class="stat-value">${data.moduleCount}</strong><span class="stat-label">Módulos</span></div>
  <div class="stat"><strong class="stat-value">${data.questionCount}</strong><span class="stat-label">Questões distintas</span></div>
  <div class="stat"><strong class="stat-value">Sob demanda</strong><span class="stat-label">Carrega só o módulo escolhido</span></div></div>
- <div class="section-head"><h2>Escolha o módulo</h2><div class="inline-actions"><a class="btn btn-primary" href="#treino-admin">Novo motor com registro de respostas</a><a class="btn" href="#materia/administracao">Voltar ao ADM-ESTUDO</a></div></div>
+ <div class="section-head"><h2>Escolha o módulo</h2><div class="inline-actions"><a class="btn btn-primary" href="#treino-admin">Novo motor com registro de respostas</a><a class="btn" href="#materia/administracao">Voltar à Administração</a></div></div>
  <div class="module-list">${data.modules.map(item=>`<a class="module-item" href="#admin-questoes/${esc(item.id)}/1"><strong>${esc(item.id)} · ${esc(item.title)}</strong><small>${item.count} questões</small></a>`).join('')}</div>`;
 }
 async function renderAdminQuestionPreview(moduleId,page,token){
@@ -77,7 +108,7 @@ async function renderAdminQuestionPreview(moduleId,page,token){
  const visible=questions.slice(first,first+pageSize);
  main.innerHTML=`${crumb([{text:'Início',href:'inicio'},{text:'Administração',href:'materia/administracao'},{text:'Módulos',href:'admin-modulos'},{text:module.title}])}
  <div class="section-head"><div><p class="eyebrow">${esc(module.id)} · Consulta por módulo</p><h2>${esc(module.title)}</h2></div><a class="btn" href="#admin-modulos">← Todos os módulos</a></div>
- <p class="notice">Consulta de leitura: os gabaritos ficam ocultos até você abrir cada explicação. <strong>Nenhuma resposta é registrada aqui.</strong> Para estudar com estatísticas e revisão espaçada, abra o ADM-ESTUDO.</p>
+ <p class="notice">Consulta de leitura: os gabaritos ficam ocultos até você abrir cada explicação. <strong>Nenhuma resposta é registrada aqui.</strong> Para registrar respostas e usar revisão espaçada, abra o Banco no motor compartilhado.</p>
  <div class="inline-actions"><span class="state">${module.count} questões</span><a class="btn" href="#materia/administracao">Abrir ADM-ESTUDO completo</a></div>
  <div class="admin-preview">${visible.map((q,i)=>`<article class="activity-card"><p class="eyebrow">Questão ${first+i+1} de ${questions.length} · ${esc(q.id)}</p><h3>${esc(q.stem)}</h3>
  <ol class="preview-options" type="A">${q.options.map(option=>`<li>${esc(option)}</li>`).join('')}</ol>
@@ -88,7 +119,7 @@ async function renderAdminQuestionPreview(moduleId,page,token){
  ${page<pages?`<a class="btn btn-primary" href="#admin-questoes/${esc(moduleId)}/${page+1}">Próximas →</a>`:''}</nav>`;
 }
 async function renderSubject(subject,token){
- if(subject.id==='administracao')return renderAdmin(subject,token);
+ if(subject.id==='administracao')return renderAdminNative(subject,token);
  const data=await loadSubjectCatalog(subject.id);if(token!==sequence)return;currentCatalog=data;
  const summary=readSummary(subject);
  main.innerHTML=`${crumb([{text:'Início',href:'inicio'},{text:subject.shortTitle}])}<section class="hero"><p class="eyebrow">Disciplina</p><h1>${esc(subject.title)}</h1><p>Conteúdo distribuído em arquivos individuais por módulo, com progresso salvo separadamente.</p></section>
@@ -145,6 +176,7 @@ async function handleClick(event){const btn=event.target.closest('button[data-re
 async function render(){const token=++sequence;currentBundle=null;main.classList.remove('workspace');const route=safeHash();activeRoute=route;setNav(route[0]);main.innerHTML='<div class="loading">Carregando…</div>';try{
  if(route[0]==='inicio'||route.length===0){renderHome();return}
  if(route[0]==='disciplinas'){renderSubjects();return}
+ if(route[0]==='materia'&&route[1]==='administracao'&&route[2]==='legado'&&route.length===3){await renderAdminLegacy(getSubject('administracao'),token);return}
  if(route[0]==='materia'&&route.length===2){const subject=getSubject(route[1]);if(!subject)throw Error('Disciplina não encontrada.');await renderSubject(subject,token);return}
  if(route[0]==='admin-modulos'&&route.length===1){await renderAdminModules(token);return}
    if(route[0]==='estudo'){await renderSharedModule(route,main,()=>token===sequence);return}

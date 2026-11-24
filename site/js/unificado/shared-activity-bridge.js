@@ -60,7 +60,7 @@ export async function buildSharedStudyView(bundle,{
  const needsQuestions=!!training.exerciseSessions?.[bundle.moduleId]||
    Object.values(training.questions).some(x=>x.moduleId===bundle.moduleId&&x.history.some(h=>h.source==='bank'));
  const questions=needsQuestions?await loadAdminQuestions(bundle.moduleId):[];
- const score=calculateSharedModuleProgress(bundle,baseline.progress,original,activity.state,{training,questions});
+ const score=calculateSharedModuleProgress(bundle,baseline.progress,original,activity.state,{training,questions,baselineSource:baseline.source});
  return {source:baseline.source,sourceAt:baseline.source==='imported'?
    baseline.imported.metadata.importedAt:baseline.legacy?.metadata?.updatedAt??null,
    locked:false,activity:activity.state,score};

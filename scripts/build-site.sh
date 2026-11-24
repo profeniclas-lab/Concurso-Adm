@@ -57,6 +57,12 @@ node scripts/audit-phase7e-parity.mjs dist/administracao
 node scripts/audit-phase8b-parity.mjs dist/administracao
 # Fase 8C: exercícios, banco, revisões e simulados no mesmo histórico de IDs.
 node scripts/audit-phase8c-integration.mjs dist/administracao
+# Fase 8D: Banco conciliado por ID e transição nativa sem remover o legado.
+node scripts/audit-phase8d-transition.mjs dist/administracao
+if [[ ! -s dist/administracao/catalogo-leve/auditoria-fase8d.json ]]; then
+  echo 'ERRO: auditoria da Fase 8D ausente.' >&2
+  exit 1
+fi
 if [[ ! -s dist/administracao/catalogo-leve/auditoria-fase8c.json ]]; then
   echo 'ERRO: auditoria da Fase 8C ausente.' >&2
   exit 1

@@ -1,5 +1,6 @@
 /** Fase 6 — telas de treino do portal. Não importam o motor legado nem seus dados. */
 import {loadAdminCatalog,loadAdminQuestions} from './admin-catalog.js';
+import {renderSharedAdminDashboard} from './shared-dashboard.js';
 import {readTrainingState,updateTrainingState} from './training-store.js';
 import {readLegacyState,compareHistories,buildDualHistorySnapshot} from './legacy-compat.js';
 import {prepareLegacyMigration,commitLegacyMigration,inspectMigrationRecovery,restorePreMigration,discardUnappliedRecovery} from './legacy-migration.js';
@@ -11,7 +12,7 @@ import {TRAINING_KEY,recordTrainingAttempt,summarizeTraining,reviewEntries,
   selectExamQuestions,createExam,answerExam,navigateExam,finishExam} from './training-engine.js';
 const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":"&#39;"}[c]));
 const a=(hash,label,cls='btn')=>`<a class="${cls}" href="#${esc(hash)}">${esc(label)}</a>`;
-const title=(heading,subtitle='')=>`<div class="section-head"><div><p class="eyebrow">Motor compartilhado · Fase 8C</p><h1>${esc(heading)}</h1>${subtitle?`<p class="muted">${esc(subtitle)}</p>`:''}</div>${a('materia/administracao','Abrir ADM-ESTUDO')}</div>`;
+const title=(heading,subtitle='')=>`<div class="section-head"><div><p class="eyebrow">Motor compartilhado · Fase 8D</p><h1>${esc(heading)}</h1>${subtitle?`<p class="muted">${esc(subtitle)}</p>`:''}</div>${a('materia/administracao/legado','Abrir ADM-ESTUDO original')}</div>`;
 const fmt=x=>x?new Date(x).toLocaleDateString('pt-BR'):'—';
 const alphabet=i=>String.fromCharCode(65+i);
 const retake=new Set();
@@ -20,7 +21,7 @@ const errorState=r=>{if(!r.ok)throw Error(r.message||'Não foi possível carrega
 const snapshot=()=>errorState(readTrainingState());
 const note='<p class="notice" role="note"><strong>Área nova de treino:</strong> salva em <code>estudoConcursos.v1.training.administracao</code>. A importação de tentativas antigas é opcional, em Históricos. O ADM-ESTUDO original não é alterado. Faça backups antes de trocar de navegador.</p>';
 const stat=(val,label)=>`<div class="stat"><strong class="stat-value">${esc(val)}</strong><span class="stat-label">${esc(label)}</span></div>`;
-const linkNav=`<nav class="training-nav" aria-label="Atividades do novo motor">${a('treino-admin','Painel')}${a('treino-admin/modulos','Módulos e questões')}${a('treino-admin/simulado','Simulados')}${a('treino-admin/revisao','Revisão')}${a('treino-admin/estatisticas','Estatísticas')}${a('treino-admin/compatibilidade','Históricos')}${a('treino-admin/pedagogia','Aproveitamento')}${a('treino-admin/auditoria','Verificação 7E')}</nav>`;
+const linkNav=`<nav class="training-nav" aria-label="Atividades do novo motor">${a('treino-admin','Painel')}${a('treino-admin/modulos','Módulos e questões')}${a('treino-admin/visao-unificada/1','Aproveitamento atualizado')}${a('treino-admin/simulado','Simulados')}${a('treino-admin/revisao','Revisão')}${a('treino-admin/estatisticas','Estatísticas')}${a('treino-admin/compatibilidade','Históricos')}${a('treino-admin/pedagogia','Aproveitamento')}${a('treino-admin/auditoria','Verificação 7E')}</nav>`;
 const answers=q=>q.options.map((option,i)=>`<button class="choice" type="button" data-train-action="bank-answer" data-qid="${esc(q.id)}" data-selected="${i}">${alphabet(i)}. ${esc(option)}</button>`).join('');
 const explain=q=>`<div class="feedback"><strong>Gabarito: ${alphabet(q.answer)} — ${esc(q.options[q.answer])}</strong>${q.explanation?`<p>${esc(q.explanation)}</p>`:''}${q.examTip?`<p><strong>Dica:</strong> ${esc(q.examTip)}</p>`:''}</div>`;
 function bankItem(q,index,state,{review=false}={}){
@@ -41,7 +42,7 @@ async function renderHome(main){
  <div class="training-actions"><article class="panel"><h2>Banco de questões</h2><p>Escolha um módulo e responda com correção imediata.</p>${a('treino-admin/modulos','Escolher módulo','btn btn-primary')}</article>
  <article class="panel"><h2>Simulado de 20 questões</h2><p>Treino geral ou por módulo, com retomada se você fechar a página.</p>${a('treino-admin/simulado','Abrir simulados')}</article>
  <article class="panel"><h2>Revisões programadas</h2><p>Reveja erros e questões agendadas após sua autoavaliação.</p>${a('treino-admin/revisao','Revisar erros')}</article>
- <article class="panel"><h2>Progresso por módulo</h2><p>Consulte o aproveitamento importado e a atividade nova, sem somar as duas notas.</p>${a('treino-admin/modulos','Ver meus módulos')}</article></div>`;
+ <article class="panel"><h2>Progresso por módulo</h2><p>Veja a nota efetiva das novas atividades e as evidências conciliadas, sem duplicação.</p>${a('treino-admin/visao-unificada/1','Ver aproveitamento atualizado')}</article></div>`;
 }
 /**
  * Fase 7D: resumo por módulo a partir da cópia F7C ou do histórico original.
@@ -288,6 +289,7 @@ export async function renderAdminTraining(route,main,isCurrent=()=>true){
  main=safeMain;
  if(route.length===1)return renderHome(main);
  if(route[1]==='modulos' && route.length===2)return renderModules(main);
+ if(route[1]==='visao-unificada'&&route.length===3)return renderSharedAdminDashboard(Number(route[2]),main,isCurrent);
  if(route[1]==='modulo' && route.length===3)return renderAdminModuleDetails(main,route[2]);
  if(route[1]==='banco'&&route.length===4)return renderBank(main,route[2],Number(route[3]));
  if(route[1]==='simulado' && route.length===2)return renderExam(main);

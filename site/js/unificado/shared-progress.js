@@ -7,13 +7,14 @@ import {calculatePartialAchievement} from './admin-pedagogy.js';
 import {validateSharedActivityState} from './shared-activity-store.js';
 import {summarizeTraining} from './training-engine.js';
 import {exerciseSessionSummary} from './shared-exercise-engine.js';
+import {reconcileBankEvidence} from './shared-bank-reconciliation.js';
 const ratings={sei:100,duvida:50,nao:0};
 const own=(o,k)=>Object.prototype.hasOwnProperty.call(o,k);
 const obj=x=>x!==null&&typeof x==='object'&&!Array.isArray(x);
 const pct=(a,b)=>b?100*a/b:0;
 export const ratingText=x=>({sei:'Eu sei',duvida:'Tenho dúvida',nao:'Não sei'}[x]??'Pendente');
 
-export function calculateSharedModuleProgress(bundle,baselineProgress,baseAchievement,overlay,{training=null,questions=[]}={}){
+export function calculateSharedModuleProgress(bundle,baselineProgress,baseAchievement,overlay,{training=null,questions=[],baselineSource='imported'}={}){
  validateSharedActivityState(overlay,bundle.subjectId);
  const moduleId=bundle.moduleId;
  const base=obj(baselineProgress)?baselineProgress:{};
@@ -54,20 +55,22 @@ export function calculateSharedModuleProgress(bundle,baselineProgress,baseAchiev
  if(exerciseChanged){components.exercises={available:true,
    score:pct(liveExercise.correct,liveExercise.answered),
    coverage:pct(liveExercise.answered,liveExercise.total)};}
- // Só computa Banco novo se não houver Banco herdado. Sem histórico individual
- // antigo na cópia F7C, misturar médias criaria duplicações silenciosas.
- const lookup=new Map(questions.map(q=>[q.id,q]));
- const newBank=training?Object.entries(training.questions).filter(([id,record])=>
-   record.moduleId===moduleId&&lookup.has(id)&&record.history.some(h=>h.source==='bank')
-   ).map(([id,record])=>({id,
-     attempt:record.history.filter(h=>h.source==='bank').at(-1)})).filter(x=>
-     Number.isInteger(x.attempt?.answer)&&x.attempt.answer>=0&&x.attempt.answer<lookup.get(x.id).options.length):[];
- let liveBank=null;
- if(newBank.length){
-   const correct=newBank.filter(x=>x.attempt.answer===lookup.get(x.id).answer).length;
-   liveBank={answered:newBank.length,correct,score:pct(correct,newBank.length),
-     applied:!components.bank?.available};
-   if(liveBank.applied)components.bank={available:true,score:liveBank.score,coverage:100};
+ // A Fase 8D concilia o Banco com base em respostas individuais quando possível.
+ // Na cópia F7C (apenas nota agregada) o componente herdado permanece congelado.
+ let bankReconciliation=null,liveBank=null;
+ const hasBank=training&&Object.values(training.questions).some(x=>
+   x.moduleId===moduleId&&x.history.some(h=>h.source==='bank'));
+ if(hasBank){
+   bankReconciliation=reconcileBankEvidence({moduleId,questions,baselineProgress:base,
+     originalBank:oldComponents.bank,training,source:baselineSource});
+   const visible=Object.entries(training.questions).filter(([id,r])=>r.moduleId===moduleId&&
+     questions.some(q=>q.id===id)&&r.history.some(h=>h.source==='bank'));
+   const lookup=new Map(questions.map(q=>[q.id,q]));
+   const correct=visible.filter(([id,r])=>r.history.filter(h=>h.source==='bank').at(-1)?.answer===lookup.get(id)?.answer).length;
+   liveBank={answered:visible.length,correct,score:pct(correct,visible.length),
+     applied:bankReconciliation.applied,status:bankReconciliation.status,
+     reason:bankReconciliation.reason};
+   if(bankReconciliation.component)components.bank=bankReconciliation.component;
  }
  const trainingTotals=training?summarizeTraining(training):null;
  const moduleTraining=trainingTotals?.modules?.[moduleId]??null;
@@ -78,6 +81,6 @@ export function calculateSharedModuleProgress(bundle,baselineProgress,baseAchiev
  return {...result,moduleId,sourceChanged:changedIds.size>0||exerciseChanged||!!liveBank?.applied,
    evidence:{diagnostics:diagRated,diagnosticsTotal:bundle.diagnostic.length,
      lessonsDone,lessonsRated,lessonsTotal:lessonIds.length},subtopics:entries,
-   liveExercise,liveBank,trainingMetrics:moduleTraining,
+   liveExercise,liveBank,bankReconciliation,trainingMetrics:moduleTraining,
    frozenStages:[...(exerciseChanged?[]:['exercises']),...(components.bank?.available&&!liveBank?.applied?['bank']:[])]};
 }
