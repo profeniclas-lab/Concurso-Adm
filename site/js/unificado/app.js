@@ -1,5 +1,6 @@
 import {listSubjects,getSubject} from './subjects.js';
 import {loadAdminCatalog,loadAdminQuestions} from './admin-catalog.js';
+import {renderAdminTraining,handleAdminTrainingClick} from './admin-training-ui.js';
 import {getSubjectStorageKey,UNIFIED_UI_STORAGE_KEY} from './storage-keys.js';
 import {loadSubjectCatalog,loadModule} from './loader.js';
 import {readSubjectProgress,readAdminProgress,saveSubjectProgress,summarizeSubjectProgress,recordQuestion,recordDiagnostic,markLessonComplete,recordFlashcard} from './progress-store.js';
@@ -49,7 +50,7 @@ async function renderAdmin(subject,token){
   main.innerHTML=`${crumb([{text:'Início',href:'inicio'},{text:subject.shortTitle}])}
     <div class="section-head"><div><p class="eyebrow">Matéria disponível</p><h2>${esc(subject.title)}</h2></div><a class="btn" href="#inicio">← Voltar ao painel</a></div>
     ${local?`<p class="notice">Integração de transição: o ADM-ESTUDO original está incorporado abaixo, sem alterações nas suas aulas, questões ou regras de progresso.</p>
-    <div class="inline-actions"><a class="btn" href="#admin-modulos">Explorar 757 questões por módulo</a><a class="btn btn-primary" href="./administracao/index.html" target="_blank" rel="noopener noreferrer">Abrir Administração em tela cheia ↗</a></div>
+    <div class="inline-actions"><a class="btn" href="#admin-modulos">Consultar 757 questões</a><a class="btn btn-primary" href="#treino-admin">Treinar no novo motor</a><a class="btn" href="./administracao/index.html" target="_blank" rel="noopener noreferrer">Abrir Administração em tela cheia ↗</a></div>
     <iframe id="admin-frame" class="admin-frame" title="Aplicativo ADM-ESTUDO — Administração e Direito Administrativo" src="./administracao/index.html" loading="eager" referrerpolicy="same-origin"></iframe>`:
     `<div class="panel"><h3>Administração já está disponível</h3><p>Esta cópia de teste não inclui os arquivos administrativos. Na publicação pelo GitHub Actions, a versão preservada de <code>Dir-Adm/nova-arquitetura</code> será incorporada automaticamente.</p>
     <p>Enquanto isso, você pode estudar no aplicativo original:</p><a class="btn btn-primary" href="https://profeniclas-lab.github.io/Dir-Adm/" target="_blank" rel="noopener noreferrer">Abrir ADM-ESTUDO original ↗</a></div>`}`;
@@ -62,7 +63,7 @@ async function renderAdminModules(token){
  <div class="stats"><div class="stat"><strong class="stat-value">${data.moduleCount}</strong><span class="stat-label">Módulos</span></div>
  <div class="stat"><strong class="stat-value">${data.questionCount}</strong><span class="stat-label">Questões distintas</span></div>
  <div class="stat"><strong class="stat-value">Sob demanda</strong><span class="stat-label">Carrega só o módulo escolhido</span></div></div>
- <div class="section-head"><h2>Escolha o módulo</h2><a class="btn" href="#materia/administracao">Voltar ao ADM-ESTUDO</a></div>
+ <div class="section-head"><h2>Escolha o módulo</h2><div class="inline-actions"><a class="btn btn-primary" href="#treino-admin">Novo motor com registro de respostas</a><a class="btn" href="#materia/administracao">Voltar ao ADM-ESTUDO</a></div></div>
  <div class="module-list">${data.modules.map(item=>`<a class="module-item" href="#admin-questoes/${esc(item.id)}/1"><strong>${esc(item.id)} · ${esc(item.title)}</strong><small>${item.count} questões</small></a>`).join('')}</div>`;
 }
 async function renderAdminQuestionPreview(moduleId,page,token){
@@ -145,9 +146,13 @@ async function render(){const token=++sequence;currentBundle=null;main.classList
  if(route[0]==='disciplinas'){renderSubjects();return}
  if(route[0]==='materia'&&route.length===2){const subject=getSubject(route[1]);if(!subject)throw Error('Disciplina não encontrada.');await renderSubject(subject,token);return}
  if(route[0]==='admin-modulos'&&route.length===1){await renderAdminModules(token);return}
+   if(route[0]==='treino-admin'){await renderAdminTraining(route,main,()=>token===sequence);return}
  if(route[0]==='admin-questoes'&&route.length>=2&&route.length<=3){await renderAdminQuestionPreview(route[1],Number(route[2]??1),token);return}
  if(route[0]==='modulo'&&route.length>=3){const subject=getSubject(route[1]);if(!subject||subject.id==='administracao'||!tabs.some(t=>t[0]===(route[3]??'aulas')))throw Error('Página do módulo inválida.');await renderModule(subject,route[2],route[3]??'aulas',token);return}
  location.hash='#inicio';
  }catch(error){if(token!==sequence)return;main.innerHTML=`<section class="panel"><h2>Não foi possível abrir esta página</h2><p class="notice error">${esc(error.message||error)}</p><a class="btn" href="#inicio">Voltar ao início</a></section>`}}
 function setupTheme(){let theme='light';try{theme=JSON.parse(localStorage.getItem(UNIFIED_UI_STORAGE_KEY)??'{}').theme==='dark'?'dark':'light'}catch{}document.documentElement.dataset.theme=theme;const btn=document.getElementById('theme-toggle');const sync=()=>{btn.textContent=theme==='dark'?'☀':'☾';btn.setAttribute('aria-label',theme==='dark'?'Ativar modo claro':'Ativar modo escuro')};sync();btn.addEventListener('click',()=>{theme=theme==='dark'?'light':'dark';document.documentElement.dataset.theme=theme;sync();try{localStorage.setItem(UNIFIED_UI_STORAGE_KEY,JSON.stringify({theme}))}catch{}})}
-setupTheme();window.addEventListener('hashchange',()=>render());document.addEventListener('click',handleClick);render();
+setupTheme();window.addEventListener('hashchange',()=>render());document.addEventListener('click',async event=>{
+ if(event.target instanceof Element && event.target.closest('button[data-train-action]'))await handleAdminTrainingClick(event,render);
+ else await handleClick(event);
+});render();

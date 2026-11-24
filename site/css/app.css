@@ -12,3 +12,16 @@ html[data-theme="dark"]{color-scheme:dark;--bg:#121927;--surface:#1b2434;--surfa
 .preview-answer p{margin:12px 0 0;white-space:pre-line}
 .preview-pagination{display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:flex-end;margin-top:22px}
 .preview-pagination span{margin-right:auto;color:var(--muted)}
+
+/* Fase 6 — treino unificado, sem alterar o design interno do ADM-ESTUDO. */
+.training-nav{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0 18px}
+.training-nav .btn{font-size:13px}
+.training-actions{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px;margin:18px 0}
+.training-actions .panel{margin:0;display:flex;flex-direction:column;gap:10px}
+.training-actions .panel p{flex:1;color:var(--muted)}
+.training-select{display:block;width:100%;max-width:600px;margin:10px 0 18px;background:var(--surface);color:var(--text);border:1px solid var(--line);border-radius:10px;padding:11px 13px;font-size:14px}
+.training-answers{margin:12px 0}
+.training-selected,.training-selected:hover{background:var(--surface-2);border:2px solid var(--brand);font-weight:700}
+.training-results{margin:12px 0 20px;padding-left:28px;line-height:1.9}
+.training-nav a:focus-visible,.choice:focus-visible,.training-select:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+@media(max-width:670px){.training-actions{grid-template-columns:1fr}.training-nav{gap:5px}.training-nav .btn{padding:8px 10px;min-height:36px}}
