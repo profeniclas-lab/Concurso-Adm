@@ -44,3 +44,6 @@ html[data-theme="dark"]{color-scheme:dark;--bg:#121927;--surface:#1b2434;--surfa
 .module-subtopic strong,.module-subtopic small{display:block}
 .module-subtopic p{margin:6px 0 0;font-size:13px}
 @media(max-width:580px){.module-component{align-items:flex-start}.module-progress-row .btn{width:100%}}
+
+/* Fase 8A — conteúdo pedagógico com quebras preservadas. */
+.native-paragraph {white-space:pre-line;line-height:1.7;overflow-wrap:anywhere;}

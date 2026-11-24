@@ -1,6 +1,7 @@
 import {listSubjects,getSubject} from './subjects.js';
 import {loadAdminCatalog,loadAdminQuestions} from './admin-catalog.js';
 import {renderAdminTraining,handleAdminTrainingClick} from './admin-training-ui.js';
+import {renderSharedModule} from './shared-module-ui.js';
 import {getSubjectStorageKey,UNIFIED_UI_STORAGE_KEY} from './storage-keys.js';
 import {loadSubjectCatalog,loadModule} from './loader.js';
 import {readSubjectProgress,readAdminProgress,saveSubjectProgress,summarizeSubjectProgress,recordQuestion,recordDiagnostic,markLessonComplete,recordFlashcard} from './progress-store.js';
@@ -146,7 +147,8 @@ async function render(){const token=++sequence;currentBundle=null;main.classList
  if(route[0]==='disciplinas'){renderSubjects();return}
  if(route[0]==='materia'&&route.length===2){const subject=getSubject(route[1]);if(!subject)throw Error('Disciplina não encontrada.');await renderSubject(subject,token);return}
  if(route[0]==='admin-modulos'&&route.length===1){await renderAdminModules(token);return}
-   if(route[0]==='treino-admin'){await renderAdminTraining(route,main,()=>token===sequence);return}
+   if(route[0]==='estudo'){await renderSharedModule(route,main,()=>token===sequence);return}
+ if(route[0]==='treino-admin'){await renderAdminTraining(route,main,()=>token===sequence);return}
  if(route[0]==='admin-questoes'&&route.length>=2&&route.length<=3){await renderAdminQuestionPreview(route[1],Number(route[2]??1),token);return}
  if(route[0]==='modulo'&&route.length>=3){const subject=getSubject(route[1]);if(!subject||subject.id==='administracao'||!tabs.some(t=>t[0]===(route[3]??'aulas')))throw Error('Página do módulo inválida.');await renderModule(subject,route[2],route[3]??'aulas',token);return}
  location.hash='#inicio';

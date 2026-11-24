@@ -49,10 +49,16 @@ fi
 node scripts/modularize-admin-questions.mjs dist/administracao
 node scripts/build-admin-lazy-catalog.mjs dist/administracao
 node scripts/build-admin-pedagogy-index.mjs dist/administracao
+# Fase 8A: adaptador nativo de aulas e diagnóstico por módulo.
+node scripts/build-admin-shared-bundles.mjs dist/administracao
 # Fase 7E: confronta 24 cenários x 27 módulos com a função original.
 node scripts/audit-phase7e-parity.mjs dist/administracao
 if [[ ! -s dist/administracao/catalogo-leve/auditoria-fase7e.json ]]; then
   echo "ERRO: relatório de paridade da Fase 7E ausente." >&2
+  exit 1
+fi
+if [[ ! -s dist/administracao/catalogo-leve/motor-unificado/manifest.json ]]; then
+  echo 'ERRO: módulos nativos não foram gerados.' >&2
   exit 1
 fi
 if [[ ! -s dist/administracao/catalogo-leve/pedagogia-index.json ]]; then

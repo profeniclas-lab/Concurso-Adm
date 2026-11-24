@@ -71,7 +71,7 @@ async function renderModules(main){
  <div class="module-progress-heading"><div><h2>${esc(x.id)} · ${esc(x.title)}</h2><p class="small muted">${x.questionsAvailable} questões cadastradas</p></div><span class="state ${x.completed?'live':''}">${x.completed?'75 pontos atingidos':x.hasData?'Em andamento':'Sem registro'}</span></div>
  <p><strong>Pedagógico:</strong> ${esc(scoreText(x))}</p>
  <p class="small muted"><strong>Novo treino:</strong> ${x.training.distinct} questões distintas, ${x.training.attempts} tentativas e ${x.training.due} revisão(ões) vencida(s) — estatísticas independentes.</p>
- <div class="inline-actions">${a(`treino-admin/modulo/${x.id}`,'Ver progresso e atividades')}${a(`treino-admin/banco/${x.id}/1`,'Responder questões','btn btn-primary')}</div></article>`).join('')}</div>`;
+ <div class="inline-actions">${a(`treino-admin/modulo/${x.id}`,'Ver progresso e atividades')}${a(`estudo/administracao/${x.id}`,'Estudar aulas e diagnóstico')}${a(`treino-admin/banco/${x.id}/1`,'Responder questões','btn btn-primary')}</div></article>`).join('')}</div>`;
 }
 async function renderAdminModuleDetails(main,moduleId){
  const {overview,warnings}=await moduleOverview();
@@ -79,7 +79,7 @@ async function renderAdminModuleDetails(main,moduleId){
  if(!x)throw Error('Módulo administrativo não encontrado no catálogo validado.');
  const status=x.completed?'Meta de 75 pontos atingida':x.hasData?'Meta ainda não atingida':'Aproveitamento ainda não registrado';
  main.innerHTML=`${title(`${x.id} — ${x.title}`,'Progresso pedagógico por módulo · Fase 7D')}${linkNav}${warningHtml(warnings)}
- <div class="inline-actions">${a('treino-admin/modulos','← Todos os módulos')}${a(`treino-admin/banco/${x.id}/1`,'Treinar questões','btn btn-primary')}${a('treino-admin/pedagogia','Gerenciar importação pedagógica')}</div>
+ <div class="inline-actions">${a('treino-admin/modulos','← Todos os módulos')}${a(`estudo/administracao/${x.id}`,'Abrir aulas no motor comum')}${a(`treino-admin/banco/${x.id}/1`,'Treinar questões','btn btn-primary')}${a('treino-admin/pedagogia','Gerenciar importação pedagógica')}</div>
  <p class="notice" role="note"><strong>Fonte da pontuação:</strong> ${esc(sourceText(x.source))}${x.sourceAt?' · referência '+esc(fmt(x.sourceAt)):''}. ${x.source==='imported'?'Esta é uma fotografia do momento da importação; novas atividades não alteram esta nota.':''}${x.sourceMayBeOlder?' O registro original pode ter atividades posteriores.':''}</p>
  <section class="panel"><h2>Aproveitamento pedagógico</h2>
  <p class="module-score">${x.hasData?`${points(x.earnedWeightedPoints)} <span>de 100 pontos · ${x.percentage}%</span>`:'— <span>sem atividade pedagógica registrada</span>'}</p>
