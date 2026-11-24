@@ -3,6 +3,8 @@ import {loadAdminCatalog,loadAdminQuestions} from './admin-catalog.js';
 import {readTrainingState,updateTrainingState} from './training-store.js';
 import {readLegacyState,compareHistories,buildDualHistorySnapshot} from './legacy-compat.js';
 import {prepareLegacyMigration,commitLegacyMigration,inspectMigrationRecovery,restorePreMigration,discardUnappliedRecovery} from './legacy-migration.js';
+import {loadPedagogyIndex,allModulePedagogy,preparePedagogyImport,commitPedagogyImport,
+  readPedagogySnapshot,inspectPedagogyRecovery,restorePedagogyImport,buildPedagogyBackup} from './admin-pedagogy.js';
 import {TRAINING_KEY,recordTrainingAttempt,summarizeTraining,reviewEntries,
   selectExamQuestions,createExam,answerExam,navigateExam,finishExam} from './training-engine.js';
 const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":"&#39;"}[c]));
@@ -16,7 +18,7 @@ const errorState=r=>{if(!r.ok)throw Error(r.message||'Não foi possível carrega
 const snapshot=()=>errorState(readTrainingState());
 const note='<p class="notice" role="note"><strong>Área nova de treino:</strong> salva em <code>estudoConcursos.v1.training.administracao</code>. A importação de tentativas antigas é opcional, em Históricos. O ADM-ESTUDO original não é alterado. Faça backups antes de trocar de navegador.</p>';
 const stat=(val,label)=>`<div class="stat"><strong class="stat-value">${esc(val)}</strong><span class="stat-label">${esc(label)}</span></div>`;
-const linkNav=`<nav class="training-nav" aria-label="Atividades do novo motor">${a('treino-admin','Painel')}${a('treino-admin/modulos','Banco de questões')}${a('treino-admin/simulado','Simulados')}${a('treino-admin/revisao','Revisão')}${a('treino-admin/estatisticas','Estatísticas')}${a('treino-admin/compatibilidade','Históricos')}</nav>`;
+const linkNav=`<nav class="training-nav" aria-label="Atividades do novo motor">${a('treino-admin','Painel')}${a('treino-admin/modulos','Banco de questões')}${a('treino-admin/simulado','Simulados')}${a('treino-admin/revisao','Revisão')}${a('treino-admin/estatisticas','Estatísticas')}${a('treino-admin/compatibilidade','Históricos')}${a('treino-admin/pedagogia','Aproveitamento')}</nav>`;
 const answers=q=>q.options.map((option,i)=>`<button class="choice" type="button" data-train-action="bank-answer" data-qid="${esc(q.id)}" data-selected="${i}">${alphabet(i)}. ${esc(option)}</button>`).join('');
 const explain=q=>`<div class="feedback"><strong>Gabarito: ${alphabet(q.answer)} — ${esc(q.options[q.answer])}</strong>${q.explanation?`<p>${esc(q.explanation)}</p>`:''}${q.examTip?`<p><strong>Dica:</strong> ${esc(q.examTip)}</p>`:''}</div>`;
 function bankItem(q,index,state,{review=false}={}){
@@ -142,6 +144,45 @@ function renderCompatibility(main) {
  <section class="panel"><h2>O que ainda não está unificado</h2><ul>${report.limitations.map(v=>`<li>${esc(v)}</li>`).join('')}</ul><p>Se você estudou em outro navegador ou aparelho, os dados antigos podem não estar presentes aqui. Este painel não os procura automaticamente no Google Drive.</p></section>`;
 }
 
+
+/** Fase 7C: espelho fiel do aproveitamento legado, sem escrita automática. */
+let pendingPedagogy=null;
+let pedagogyBackupRequested=false;
+async function renderPedagogy(main){
+ const index=await loadPedagogyIndex();
+ const legacy=readLegacyState();
+ const saved=readPedagogySnapshot();
+ const recovery=inspectPedagogyRecovery();
+ const imported=saved.ok&&saved.exists?saved.snapshot:null;
+ const results=legacy.ok&&legacy.exists?allModulePedagogy(legacy.state,index):[];
+ const started=results.filter(x=>x.hasData);
+ const reached=results.filter(x=>x.completed);
+ const noLegacy=!legacy.ok?`<p class="notice error">O histórico antigo não pôde ser interpretado: ${esc(legacy.message)}. Nenhuma gravação foi feita.</p>`:
+   !legacy.exists?'<p class="notice">Não há histórico do ADM-ESTUDO neste navegador. Você pode consultar o aplicativo antigo em outro dispositivo, mas o portal não sincroniza automaticamente.</p>':'';
+ const c=pendingPedagogy?.plan?.counts;
+ const recoveryPanel=recovery.exists?`<div class="panel"><h2>Recuperação da cópia pedagógica</h2><p>A recuperação é independente da importação de tentativas da Fase 7B.</p>
+ ${recovery.canRestore||recovery.canDiscard?`<button class="btn" type="button" data-train-action="pedagogy-restore">${recovery.canRestore?'Desfazer importação pedagógica':'Liberar cópia não aplicada'}</button>`:
+ '<p class="notice">Os dados não correspondem à cópia automática. Recuperação bloqueada para não sobrescrever estudos posteriores.</p>'}</div>`:'';
+ main.innerHTML=`${title('Aproveitamento e progresso pedagógico','Fase 7C · Espelho do ADM-ESTUDO e migração opcional')}${linkNav}
+ <p class="notice"><strong>Regra original:</strong> diagnóstico 20%; aulas 30% (15% conclusão + 15% autoavaliação); exercícios 30%; Banco 20%. A meta é <strong>75 pontos conquistados</strong> entre 100 possíveis, mesmo com etapas pendentes. As notas abaixo são do ADM-ESTUDO original, não incluem atividades feitas no novo treino.</p>
+ ${noLegacy}
+ ${legacy.ok&&legacy.exists?`<div class="stats">${stat(started.length,'Módulos com atividade')}${stat(reached.length,'Módulos com 75 pontos ou mais')}${stat(index.moduleCount,'Módulos disponíveis')}${stat(index.questionCount,'Questões no catálogo')}</div>
+ <section class="panel"><h2>Aproveitamento parcial por módulo</h2><p>A nota é derivada ao abrir esta página; não modifica o progresso e não esconde módulos automaticamente.</p>
+ <div class="module-list">${results.map(x=>`<div class="module-item"><strong>${esc(x.moduleId)} · ${esc(x.moduleTitle)}</strong>
+ <small>Nota parcial: ${x.hasData?x.percentage+'%':'—'} · Pontos: ${x.earnedWeightedPoints.toFixed(2).replace('.',',')}/100 · Cobertura avaliada: ${x.coveragePercentage.toFixed(2).replace('.',',')}% · ${x.completed?'Meta de 75 atingida':'Meta ainda não atingida'}</small></div>`).join('')}</div></section>`:''}
+ <section class="panel"><h2>Importação opcional de aulas, diagnósticos e exercícios</h2>
+ <p>Importa uma cópia das evidências compatíveis para <code>estudoConcursos.v1.pedagogy.administracao</code>. Os registros do ADM-ESTUDO original <strong>não são modificados</strong>. O aproveitamento importado é uma fotografia da data da importação e não se soma à nota do treino novo.</p>
+ ${imported?`<p class="notice">Já existe uma cópia pedagógica importada em ${esc(imported.metadata?.importedAt??'data não informada')}. ${esc(imported.counts?.modulesWithActivity??0)} módulos com atividade no momento da importação. Ela não será sobrescrita automaticamente.</p>`:
+ `<button type="button" class="btn" data-train-action="pedagogy-preview" ${!legacy.ok||!legacy.exists||recovery.exists?'disabled':''}>Preparar prévia sem gravar</button>`}
+ ${c&&!imported?`<div class="notice" role="status"><strong>Prévia:</strong> ${c.modulesWithActivity} módulos com atividade; ${c.diagnosticAnswers} respostas diagnósticas; ${c.lessonsCompleted} aulas concluídas; ${c.lessonRatings} autoavaliações; ${c.exerciseAnswers} respostas de exercícios de ${c.exerciseModules} módulos.
+ <p>Ignorados por incompatibilidade: ${c.skippedExerciseModules} sessões de exercícios. Respostas e notas antigas de banco continuam em seus históricos originais.</p>
+ <p>${pedagogyBackupRequested?'Backup solicitado neste navegador: confirme que o arquivo foi salvo e conferido.':'Baixe e confira o backup antes de confirmar.'}</p>
+ <button type="button" class="btn btn-primary" data-train-action="pedagogy-import" ${!c.importedItems||!pedagogyBackupRequested?'disabled':''}>Confirmar importação pedagógica</button></div>`:''}
+ <p><button type="button" class="btn" data-train-action="pedagogy-export">Exportar backup dos históricos e da cópia pedagógica</button></p></section>
+ ${recoveryPanel}
+ <p class="small muted">Registros antigos sem alternativas identificáveis, questões removidas e demais atividades não equivalentes permanecem disponíveis no ADM-ESTUDO original. O progresso pedagógico importado ainda não é editável pelo novo motor.</p>`;
+}
+
 export async function renderAdminTraining(route,main,isCurrent=()=>true){
  if(!isCurrent())return;
  // Captura a referência original antes de usar um adaptador com setter.
@@ -156,6 +197,7 @@ export async function renderAdminTraining(route,main,isCurrent=()=>true){
  if(route[1]==='revisao' && route.length>=2 && route.length<=4 && (!route[2]||['todas','vencidas'].includes(route[2]))){const page=route[3]?Number(route[3]):1;if(!Number.isInteger(page)||page<1)throw Error('Página inválida.');return renderReview(main,route[2]==='todas',page);}
  if(route[1]==='estatisticas' && route.length===2)return renderStats(main);
  if(route[1]==='compatibilidade' && route.length===2)return renderCompatibility(main);
+ if(route[1]==='pedagogia' && route.length===2)return renderPedagogy(main);
  throw Error('Página de treinamento desconhecida.');
 }
 function update(fn){const r=updateTrainingState(fn);if(!r.ok)throw Error(r.message);return r.result;}
@@ -170,6 +212,41 @@ export async function handleAdminTrainingClick(event,rerender){
  try{
   const route=decodeURIComponent(location.hash.slice(1)).split('/');if(route[0]!=='treino-admin')return true;
   const op=btn.dataset.trainAction;
+  if(op==='pedagogy-preview'){
+    if(route[1]!=='pedagogia')throw Error('Abra Aproveitamento para preparar a prévia.');
+    pendingPedagogy=preparePedagogyImport(await loadPedagogyIndex());
+    pedagogyBackupRequested=false;
+    await rerender();return true;
+  }
+  if(op==='pedagogy-export'){
+    if(route[1]!=='pedagogia')throw Error('Backup pedagógico disponível em Aproveitamento.');
+    const payload=buildPedagogyBackup();
+    const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'});
+    const url=URL.createObjectURL(blob),link=document.createElement('a');
+    link.href=url;link.download=`estudo-concursos-pedagogia-${new Date().toISOString().slice(0,10)}.json`;
+    document.body.append(link);link.click();link.remove();
+    setTimeout(()=>URL.revokeObjectURL(url),2000);
+    pedagogyBackupRequested=true;await rerender();return true;
+  }
+  if(op==='pedagogy-import'){
+    if(route[1]!=='pedagogia'||!pendingPedagogy||!pedagogyBackupRequested)
+      throw Error('Prepare a prévia e faça o backup antes de importar.');
+    if(!window.confirm('Você salvou e abriu o backup JSON no seu dispositivo? Se não, cancele.'))return true;
+    if(!window.confirm('Importar cópia de aulas, diagnósticos e exercícios para o registro pedagógico do portal? O histórico antigo não será alterado.'))return true;
+    const result=commitPedagogyImport(pendingPedagogy,{backupConfirmed:true});
+    if(!result.ok)throw Error(result.message);
+    pendingPedagogy=null;pedagogyBackupRequested=false;
+    window.alert('Cópia pedagógica importada. Seu histórico original permanece preservado.');
+    await rerender();return true;
+  }
+  if(op==='pedagogy-restore'){
+    if(route[1]!=='pedagogia')throw Error('Abra Aproveitamento para recuperar.');
+    if(!window.confirm('Desfazer somente a importação pedagógica? Nenhum dado do ADM-ESTUDO original será alterado.'))return true;
+    const result=restorePedagogyImport({confirmed:true});
+    if(!result.ok)throw Error(result.message);
+    pendingPedagogy=null;pedagogyBackupRequested=false;
+    window.alert(result.message);await rerender();return true;
+  }
   if(op==='migration-preview'){
     if(route[1]!=='compatibilidade')throw Error('Prévia disponível somente em Históricos.');
     pendingLegacyImport=await prepareLegacyMigration();

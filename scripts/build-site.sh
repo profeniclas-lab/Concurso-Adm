@@ -48,6 +48,11 @@ fi
 # acontece SOMENTE em dist/ e é verificada antes da publicação.
 node scripts/modularize-admin-questions.mjs dist/administracao
 node scripts/build-admin-lazy-catalog.mjs dist/administracao
+node scripts/build-admin-pedagogy-index.mjs dist/administracao
+if [[ ! -s dist/administracao/catalogo-leve/pedagogia-index.json ]]; then
+  echo 'ERRO: índice pedagógico ausente.' >&2
+  exit 1
+fi
 if [[ ! -s dist/administracao/catalogo-leve/manifest.json ]]; then
   echo 'ERRO: catálogo modular de consulta não gerado.' >&2
   exit 1
