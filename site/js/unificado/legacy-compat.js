@@ -102,7 +102,7 @@ export function compareHistories(legacyState,trainingState,{now=new Date().toISO
       'Questões antigas sem alternativa numérica registrada não entram na união.',
       'Tentativas e revisões de motores diferentes permanecem separadas.',
       'O mesmo ID pode se referir a versões editoriais diferentes; a contagem não prova equivalência de conteúdo.',
-      'A migração efetiva de respostas e agendamentos ainda não foi executada.'
+      'A importação de tentativas detalhadas é manual e não transfere aulas, aproveitamento, simulados históricos ou agendamentos.'
     ]
   };
 }

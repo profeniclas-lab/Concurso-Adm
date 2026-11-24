@@ -2,6 +2,7 @@
 import {loadAdminCatalog,loadAdminQuestions} from './admin-catalog.js';
 import {readTrainingState,updateTrainingState} from './training-store.js';
 import {readLegacyState,compareHistories,buildDualHistorySnapshot} from './legacy-compat.js';
+import {prepareLegacyMigration,commitLegacyMigration,inspectMigrationRecovery,restorePreMigration,discardUnappliedRecovery} from './legacy-migration.js';
 import {TRAINING_KEY,recordTrainingAttempt,summarizeTraining,reviewEntries,
   selectExamQuestions,createExam,answerExam,navigateExam,finishExam} from './training-engine.js';
 const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":"&#39;"}[c]));
@@ -13,7 +14,7 @@ const retake=new Set();
 let busy=false;
 const errorState=r=>{if(!r.ok)throw Error(r.message||'Não foi possível carregar os dados de treino.');return r.state};
 const snapshot=()=>errorState(readTrainingState());
-const note='<p class="notice" role="note"><strong>Área nova de treino:</strong> as respostas aqui são salvas separadamente, na chave <code>estudoConcursos.v1.training.administracao</code>. O progresso do ADM-ESTUDO original não é alterado nem somado automaticamente. Use o backup desta área antes de trocar de navegador.</p>';
+const note='<p class="notice" role="note"><strong>Área nova de treino:</strong> salva em <code>estudoConcursos.v1.training.administracao</code>. A importação de tentativas antigas é opcional, em Históricos. O ADM-ESTUDO original não é alterado. Faça backups antes de trocar de navegador.</p>';
 const stat=(val,label)=>`<div class="stat"><strong class="stat-value">${esc(val)}</strong><span class="stat-label">${esc(label)}</span></div>`;
 const linkNav=`<nav class="training-nav" aria-label="Atividades do novo motor">${a('treino-admin','Painel')}${a('treino-admin/modulos','Banco de questões')}${a('treino-admin/simulado','Simulados')}${a('treino-admin/revisao','Revisão')}${a('treino-admin/estatisticas','Estatísticas')}${a('treino-admin/compatibilidade','Históricos')}</nav>`;
 const answers=q=>q.options.map((option,i)=>`<button class="choice" type="button" data-train-action="bank-answer" data-qid="${esc(q.id)}" data-selected="${i}">${alphabet(i)}. ${esc(option)}</button>`).join('');
@@ -86,20 +87,46 @@ function renderStats(main){
  main.innerHTML=`${title('Estatísticas da nova área')}${linkNav}${note}
  <div class="stats">${stat(tot.distinct,'Questões distintas')}${stat(tot.attempts,'Tentativas registradas')}${stat(tot.accuracy===null?'—':`${tot.accuracy}%`,'Taxa de acerto')}${stat(tot.simulations,'Simulados concluídos')}</div>
  <h2>Atividade por módulo</h2><div class="module-list">${Object.entries(tot.modules).sort(([a],[b])=>a.localeCompare(b)).map(([id,m])=>`<div class="module-item"><strong>${esc(id)}</strong><small>${m.distinct} questões · ${m.attempts} tentativas · ${m.attempts?Math.round(m.correct*100/m.attempts):0}% de acerto · ${m.due} revisões vencidas</small></div>`).join('')||'<p>Nenhuma questão respondida nesta área ainda.</p>'}</div>
- <div class="panel"><h2>Exportação manual</h2><p>Baixe uma cópia do histórico desta nova área. A importação e a sincronização com outros dispositivos ainda não estão disponíveis; não limpe este navegador até essas funções serem implementadas.</p><button class="btn btn-primary" type="button" data-train-action="export">Exportar cópia do histórico</button></div>`;
+ <div class="panel"><h2>Exportação manual</h2><p>Baixe uma cópia do histórico desta nova área. A importação controlada de tentativas antigas está em Históricos; restauração por arquivo e sincronização entre dispositivos ainda não estão disponíveis. Não limpe os dados do navegador.</p><button class="btn btn-primary" type="button" data-train-action="export">Exportar cópia do histórico</button></div>`;
+}
+let pendingLegacyImport=null;
+let manualBackupInitiated=false;
+function migrationPanel(hasLegacy){
+ const recovery=inspectMigrationRecovery();
+ if(recovery.exists){
+  return `<section class="panel"><h2>Recuperação da importação</h2>
+   <p>Existe uma cópia automática do histórico novo anterior à última importação. ${recovery.importedQuestions??0} questões estavam nessa operação.</p>
+   ${recovery.canRestore?`<p class="notice">É possível desfazer essa importação enquanto não houver estudo novo registrado desde então.</p>
+   <button type="button" class="btn" data-train-action="migration-restore">Desfazer importação e restaurar histórico novo</button>`:
+   recovery.canDiscardUnapplied?`<p class="notice">A importação foi interrompida antes de alterar o histórico novo. A cópia técnica pendente pode ser liberada com segurança.</p>
+   <button type="button" class="btn" data-train-action="migration-discard">Liberar cópia não aplicada</button>`:
+   `<p class="notice">A recuperação automática está bloqueada porque o histórico mudou depois da importação, ou a cópia está incompatível. Seu histórico atual não será sobrescrito.</p>`}</section>`;
+ }
+ if(!hasLegacy)return `<section class="panel"><h2>Migração opcional</h2><p>O histórico original não foi encontrado neste navegador. Não há o que importar.</p></section>`;
+ const d=pendingLegacyImport?.counts;
+ return `<section class="panel"><h2>Fase 7B — Migração controlada de tentativas</h2>
+ <p>Esta opção é <strong>manual</strong>. Apenas tentativas detalhadas e verificáveis, ainda ausentes do novo motor, serão importadas. Não transfere aproveitamento ponderado, aulas, flashcards, simulados antigos ou datas de revisão.</p>
+ <p>O catálogo de 757 questões será conferido nesta prévia. Nenhum progresso será modificado ao preparar.</p>
+ <div class="inline-actions"><button type="button" class="btn" data-train-action="migration-preview">Preparar prévia sem gravar</button></div>
+ ${d?`<div class="notice" role="status"><strong>Prévia de importação</strong><p>Importáveis: <strong>${d.importedQuestions}</strong> questões, <strong>${d.importedAttempts}</strong> tentativas detalhadas.</p>
+ <p>Já no novo motor: ${d.alreadyInNew}; somente resumo antigo: ${d.summaryOnly}; não localizadas no catálogo: ${d.notInCatalog}; revisões editoriais: ${d.editorialRevisions}; incompatíveis: ${d.incompatible}; apenas fontes não equivalentes: ${d.unsupportedOnly}; importações parciais: ${d.partial}.</p>
+ <p>Questões com partes não verificáveis continuarão disponíveis no histórico antigo. Revisões serão reagendadas somente quando você responder novamente no motor novo.</p>
+ <p>${manualBackupInitiated?'O download de backup foi solicitado nesta sessão; confirme que o arquivo foi realmente salvo e conferido.':'Baixe primeiro a cópia dos dois históricos e confira que o arquivo foi salvo.'}</p>
+ <button type="button" class="btn btn-primary" data-train-action="migration-commit" ${!manualBackupInitiated||!d.importedQuestions?'disabled':''}>Confirmar importação de ${d.importedQuestions} questões</button></div>`:''}
+ </section>`;
 }
 function renderCompatibility(main) {
  const old=readLegacyState();
  const modern=snapshot();
  if(!old.ok){
-  main.innerHTML=`${title('Compatibilidade dos históricos')}${linkNav}<div class="notice error" role="alert">O histórico do ADM-ESTUDO não pôde ser interpretado: ${esc(old.message)}. Nenhuma gravação ou migração foi feita.</div><p>Faça um backup pelo aplicativo original antes de qualquer tentativa de migração. Você também pode exportar as cópias brutas, mesmo quando o arquivo antigo não puder ser lido:</p><button class="btn btn-primary" type="button" data-train-action="dual-export">Exportar cópia dos dois históricos</button>`;
+  main.innerHTML=`${title('Compatibilidade dos históricos')}${linkNav}<div class="notice error" role="alert">O histórico do ADM-ESTUDO não pôde ser interpretado: ${esc(old.message)}. Nenhuma gravação ou migração foi feita.</div><p>Faça um backup pelo aplicativo original antes de qualquer tentativa de migração. Você também pode exportar as cópias brutas, mesmo quando o arquivo antigo não puder ser lido:</p><button class="btn btn-primary" type="button" data-train-action="dual-export">Exportar cópia dos dois históricos</button>${migrationPanel(false)}`;
   return;
  }
  const report=compareHistories(old.state,modern);
  const left=report.legacy;
  const missing='<span class="muted">Não encontrado neste navegador</span>';
- main.innerHTML=`${title('Compatibilidade dos históricos','Conferência segura dos dois motores, sem alterar seus registros')}${linkNav}
- <p class="notice" role="note"><strong>Somente leitura:</strong> nenhuma resposta será transferida nesta fase. Os dois históricos continuam independentes. A contagem unificada considera IDs de questões, sem duplicar as presentes nos dois aplicativos.</p>
+ main.innerHTML=`${title('Compatibilidade dos históricos','Comparação e opção de importar tentativas verificáveis com sua autorização')}${linkNav}
+ <p class="notice" role="note"><strong>Somente leitura (comparação):</strong> os registros continuam independentes. A importação opcional exige prévia, backup e confirmação; a contagem compartilhada considera IDs, sem duplicações.</p>
  <section class="stats" aria-label="Questões distintas em ambos os aplicativos">
  ${stat(report.distinctUnion,'Questões distintas nos dois históricos')}
  ${stat(report.oldOnly,'Apenas no ADM-ESTUDO')}
@@ -111,6 +138,7 @@ function renderCompatibility(main) {
  <article class="panel"><h2>Novo motor</h2><p><strong>${report.modern.distinct}</strong> questões distintas respondidas.</p><p>${report.modern.attempts} tentativas registradas · ${report.modern.simulations} simulados concluídos.</p><p>${report.modern.due} revisões vencidas, dentre ${report.modern.scheduledReviews} questões agendadas para revisão.</p></article></div>
  <section class="panel"><h2>Proteção antes da migração</h2><p>Exporte uma cópia bruta dos dois históricos disponíveis neste navegador. O arquivo contém os registros originais e não é restaurado automaticamente. Guarde-o em local seguro.</p>
  <button class="btn btn-primary" type="button" data-train-action="dual-export">Exportar cópia dos dois históricos</button></section>
+ ${migrationPanel(old.exists)}
  <section class="panel"><h2>O que ainda não está unificado</h2><ul>${report.limitations.map(v=>`<li>${esc(v)}</li>`).join('')}</ul><p>Se você estudou em outro navegador ou aparelho, os dados antigos podem não estar presentes aqui. Este painel não os procura automaticamente no Google Drive.</p></section>`;
 }
 
@@ -142,6 +170,39 @@ export async function handleAdminTrainingClick(event,rerender){
  try{
   const route=decodeURIComponent(location.hash.slice(1)).split('/');if(route[0]!=='treino-admin')return true;
   const op=btn.dataset.trainAction;
+  if(op==='migration-preview'){
+    if(route[1]!=='compatibilidade')throw Error('Prévia disponível somente em Históricos.');
+    pendingLegacyImport=await prepareLegacyMigration();
+    manualBackupInitiated=false;
+    await rerender();return true;
+  }
+  if(op==='migration-commit'){
+    if(route[1]!=='compatibilidade'||!pendingLegacyImport||!manualBackupInitiated)
+      throw Error('Faça a prévia e solicite o backup antes de confirmar.');
+    if(!window.confirm('Você baixou, abriu e conferiu o arquivo JSON com os DOIS históricos? Caso contrário, cancele.'))return true;
+    if(!window.confirm(`IMPORTAÇÃO OPCIONAL: adicionar ${pendingLegacyImport.counts.importedQuestions} questões e ${pendingLegacyImport.counts.importedAttempts} tentativas verificadas ao motor novo? O ADM-ESTUDO original será preservado.`))return true;
+    const result=commitLegacyMigration(pendingLegacyImport,{backupConfirmed:true});
+    if(!result.ok)throw Error(result.message);
+    pendingLegacyImport=null;manualBackupInitiated=false;
+    window.alert(`Importação concluída: ${result.importedQuestions} questões, ${result.importedAttempts} tentativas. O histórico antigo permaneceu intacto.`);
+    await rerender();return true;
+  }
+  if(op==='migration-discard'){
+    if(route[1]!=='compatibilidade')throw Error('Ação disponível somente em Históricos.');
+    if(!window.confirm('Liberar a cópia técnica de uma operação não aplicada? Só é permitido quando o histórico novo continua idêntico ao anterior.'))return true;
+    const result=discardUnappliedRecovery({confirmed:true});
+    if(!result.ok)throw Error(result.message);
+    await rerender();return true;
+  }
+  if(op==='migration-restore'){
+    if(route[1]!=='compatibilidade')throw Error('Restauração disponível apenas em Históricos.');
+    if(!window.confirm('Desfazer a importação e voltar ao histórico NOVO anterior? Isto não altera o ADM-ESTUDO original. A operação só é permitida sem estudo posterior à importação.'))return true;
+    const result=restorePreMigration({confirmed:true});
+    if(!result.ok)throw Error(result.message);
+    pendingLegacyImport=null;manualBackupInitiated=false;
+    window.alert(result.message);
+    await rerender();return true;
+  }
   if(op==='dual-export'){
     if(route[1]!=='compatibilidade')throw Error('Exportação indisponível nesta tela.');
     const payload=buildDualHistorySnapshot();
@@ -149,7 +210,7 @@ export async function handleAdminTrainingClick(event,rerender){
     const url=URL.createObjectURL(blob);const download=document.createElement('a');
     download.href=url;download.download=`estudo-concursos-historicos-${new Date().toISOString().slice(0,10)}.json`;
     document.body.appendChild(download);download.click();download.remove();
-    setTimeout(()=>URL.revokeObjectURL(url),2000);return true;
+    setTimeout(()=>URL.revokeObjectURL(url),2000);manualBackupInitiated=true;await rerender();return true;
   }
   if(op==='export'){
     const st=snapshot();const blob=new Blob([JSON.stringify({format:'estudo-concursos-training-backup/v1',createdAt:new Date().toISOString(),state:st},null,2)],{type:'application/json'});
