@@ -89,7 +89,10 @@ function renderStats(main){
 }
 export async function renderAdminTraining(route,main,isCurrent=()=>true){
  if(!isCurrent())return;
- const safeMain={set innerHTML(value){if(isCurrent())main.innerHTML=value;}};
+ // Captura a referência original antes de usar um adaptador com setter.
+ // Sem isso, a atribuição "main=safeMain" redireciona o setter para si mesmo.
+ const targetMain=main;
+ const safeMain={set innerHTML(value){if(isCurrent())targetMain.innerHTML=value;}};
  main=safeMain;
  if(route.length===1)return renderHome(main);
  if(route[1]==='modulos' && route.length===2)return renderModules(main);
