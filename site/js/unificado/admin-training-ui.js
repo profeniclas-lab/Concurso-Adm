@@ -6,6 +6,7 @@ import {prepareLegacyMigration,commitLegacyMigration,inspectMigrationRecovery,re
 import {loadPedagogyIndex,allModulePedagogy,preparePedagogyImport,commitPedagogyImport,
   readPedagogySnapshot,inspectPedagogyRecovery,restorePedagogyImport,buildPedagogyBackup} from './admin-pedagogy.js';
 import {buildAdminModuleProgress,ratingLabel} from './admin-module-progress.js';
+import {auditPhase7E,buildPhase7EBackup,readRecoveryForAudit} from './phase7e-audit.js';
 import {TRAINING_KEY,recordTrainingAttempt,summarizeTraining,reviewEntries,
   selectExamQuestions,createExam,answerExam,navigateExam,finishExam} from './training-engine.js';
 const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":"&#39;"}[c]));
@@ -19,7 +20,7 @@ const errorState=r=>{if(!r.ok)throw Error(r.message||'Não foi possível carrega
 const snapshot=()=>errorState(readTrainingState());
 const note='<p class="notice" role="note"><strong>Área nova de treino:</strong> salva em <code>estudoConcursos.v1.training.administracao</code>. A importação de tentativas antigas é opcional, em Históricos. O ADM-ESTUDO original não é alterado. Faça backups antes de trocar de navegador.</p>';
 const stat=(val,label)=>`<div class="stat"><strong class="stat-value">${esc(val)}</strong><span class="stat-label">${esc(label)}</span></div>`;
-const linkNav=`<nav class="training-nav" aria-label="Atividades do novo motor">${a('treino-admin','Painel')}${a('treino-admin/modulos','Módulos e questões')}${a('treino-admin/simulado','Simulados')}${a('treino-admin/revisao','Revisão')}${a('treino-admin/estatisticas','Estatísticas')}${a('treino-admin/compatibilidade','Históricos')}${a('treino-admin/pedagogia','Aproveitamento')}</nav>`;
+const linkNav=`<nav class="training-nav" aria-label="Atividades do novo motor">${a('treino-admin','Painel')}${a('treino-admin/modulos','Módulos e questões')}${a('treino-admin/simulado','Simulados')}${a('treino-admin/revisao','Revisão')}${a('treino-admin/estatisticas','Estatísticas')}${a('treino-admin/compatibilidade','Históricos')}${a('treino-admin/pedagogia','Aproveitamento')}${a('treino-admin/auditoria','Verificação 7E')}</nav>`;
 const answers=q=>q.options.map((option,i)=>`<button class="choice" type="button" data-train-action="bank-answer" data-qid="${esc(q.id)}" data-selected="${i}">${alphabet(i)}. ${esc(option)}</button>`).join('');
 const explain=q=>`<div class="feedback"><strong>Gabarito: ${alphabet(q.answer)} — ${esc(q.options[q.answer])}</strong>${q.explanation?`<p>${esc(q.explanation)}</p>`:''}${q.examTip?`<p><strong>Dica:</strong> ${esc(q.examTip)}</p>`:''}</div>`;
 function bankItem(q,index,state,{review=false}={}){
@@ -238,6 +239,43 @@ async function renderPedagogy(main){
  <p class="small muted">Registros antigos sem alternativas identificáveis, questões removidas e demais atividades não equivalentes permanecem disponíveis no ADM-ESTUDO original. O progresso pedagógico importado ainda não é editável pelo novo motor.</p>`;
 }
 
+/** Fase 7E: conferência de leitura. Nenhuma alteração no armazenamento. */
+async function renderAudit(main){
+ const index=await loadPedagogyIndex();
+ const original=readLegacyState(),saved=readPedagogySnapshot();
+ const modern=readTrainingState();
+ let training=modern.state;
+ if(!modern.ok){
+   try{training=JSON.parse(localStorage.getItem(TRAINING_KEY));}
+   catch{training=null;}
+ }
+ const rec=readRecoveryForAudit();
+ const report=auditPhase7E({index,training,
+   legacy:original.ok&&original.exists?original.state:null,
+   imported:saved.ok&&saved.exists?saved.snapshot:null,...rec});
+ const extra=[
+   !original.ok?'O histórico original não pôde ser lido: '+original.message:null,
+   !saved.ok?'A cópia pedagógica não pôde ser lida: '+saved.message:null,
+   !modern.ok?'O histórico do treino não pôde ser lido: '+modern.message:null
+ ].filter(Boolean);
+ const status={ok:'Conferido',aviso:'Atenção',erro:'Incompatível',info:'Informação'};
+ main.innerHTML=`${title('Verificação da migração','Fase 7E · Auditoria somente de leitura')}${linkNav}
+ <p class="notice" role="note">Esta verificação não altera dados, não mescla notas nem confirma uma restauração. Ela analisa as versões disponíveis <strong>neste navegador</strong>. A comparação independente com o motor original é executada no GitHub Actions.</p>
+ ${warningHtml(extra)}
+ <section class="stats" aria-label="Resultado da auditoria">${stat(report.totals.ok,'Verificações corretas')}${stat(report.totals.aviso,'Alertas')}${stat(report.totals.erro+extra.length,'Incompatibilidades')}${stat(report.statistics.distinctUnion??'—','Questões distintas entre históricos')}</section>
+ <section class="panel"><h2>Conferências técnicas</h2><ul class="audit-checks">${report.checks.map(item=>`<li><strong>${esc(status[item.status])} — ${esc(item.id)}:</strong> ${esc(item.detail)}</li>`).join('')}</ul></section>
+ <section class="panel"><h2>Backup completo de proteção</h2>
+ <p>Inclui os registros brutos do ADM-ESTUDO, do treino novo, da cópia pedagógica e <strong>das duas recuperações técnicas</strong>. O arquivo JSON é sensível e não deve ser enviado ao repositório. Não existe restauração automática a partir dele nesta fase.</p>
+ <button class="btn btn-primary" type="button" data-train-action="audit-export">Exportar os cinco registros</button></section>
+ <section class="panel"><h2>Conferência manual de encerramento</h2>
+ <ol><li>Compare em dois ou três módulos a pontuação com o ADM-ESTUDO original, sobretudo com atividades parciais.</li>
+ <li>Confirme a meta de <strong>75 pontos</strong>, sem somar o treino novo à nota herdada.</li>
+ <li>Confira simulados, erros e revisões nos dois motores, que ainda permanecem independentes.</li>
+ <li>Teste um módulo sem estudo e outro com estudo concluído; confira se o progresso antigo permanece intacto.</li>
+ <li>Verifique a publicação de <code>administracao/catalogo-leve/auditoria-fase7e.json</code> com 648 comparações e zero divergências.</li></ol>
+ <p>Se houver alertas, dados inconsistentes ou diferença no aplicativo original, <strong>não considere a migração encerrada</strong> até resolver a divergência. Não limpe o armazenamento do navegador.</p></section>`;
+}
+
 export async function renderAdminTraining(route,main,isCurrent=()=>true){
  if(!isCurrent())return;
  // Captura a referência original antes de usar um adaptador com setter.
@@ -254,6 +292,7 @@ export async function renderAdminTraining(route,main,isCurrent=()=>true){
  if(route[1]==='estatisticas' && route.length===2)return renderStats(main);
  if(route[1]==='compatibilidade' && route.length===2)return renderCompatibility(main);
  if(route[1]==='pedagogia' && route.length===2)return renderPedagogy(main);
+ if(route[1]==='auditoria' && route.length===2)return renderAudit(main);
  throw Error('Página de treinamento desconhecida.');
 }
 function update(fn){const r=updateTrainingState(fn);if(!r.ok)throw Error(r.message);return r.result;}
@@ -268,6 +307,15 @@ export async function handleAdminTrainingClick(event,rerender){
  try{
   const route=decodeURIComponent(location.hash.slice(1)).split('/');if(route[0]!=='treino-admin')return true;
   const op=btn.dataset.trainAction;
+  if(op==='audit-export'){
+    if(route[1]!=='auditoria')throw Error('Abra Verificação 7E para exportar este backup.');
+    const payload=buildPhase7EBackup();
+    const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'});
+    const url=URL.createObjectURL(blob);const link=document.createElement('a');
+    link.href=url;link.download=`estudo-concursos-backup-completo-fase7e-${new Date().toISOString().slice(0,10)}.json`;
+    document.body.append(link);link.click();link.remove();
+    setTimeout(()=>URL.revokeObjectURL(url),2000);return true;
+  }
   if(op==='pedagogy-preview'){
     if(route[1]!=='pedagogia')throw Error('Abra Aproveitamento para preparar a prévia.');
     pendingPedagogy=preparePedagogyImport(await loadPedagogyIndex());
