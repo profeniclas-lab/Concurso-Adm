@@ -52,17 +52,55 @@ function diagnosticView(bundle,i,view){
  <nav class="preview-pagination" aria-label="Navegação do diagnóstico">${i>1?`<a class="btn" href="${base}/diagnostico/${i-1}">← Anterior</a>`:''}<span>${i} / ${cards.length}</span>
  ${i<cards.length?`<a class="btn btn-primary" href="${base}/diagnostico/${i+1}">Próximo →</a>`:''}</nav>`;
 }
+/** Layout de módulo inspirado na organização do ADM-ESTUDO original.
+ * O diagnóstico é uma etapa do MÓDULO; as aulas são links por subtópico.
+ * Não mexe em registros, notas, catálogo ou rotas internas.
+ */
 function indexView(bundle,view){
  const base=nav(bundle.subjectId,bundle.moduleId);
- return `<section class="panel"><h2>Conteúdos do módulo</h2><p>Aulas e diagnósticos por subtópico, carregados sob demanda.</p>
- <div class="module-list">${bundle.subtopics.map((t,i)=>{
-  const e=view.score?.subtopics[t.id];
-  const li=bundle.subtopics.filter(x=>bundle.lessons[x.id]).findIndex(x=>x.id===t.id)+1;
-  const di=bundle.diagnostic.findIndex(x=>x.subtopicId===t.id)+1;
-  return `<div class="module-item"><strong>${i+1}. ${esc(t.title)}</strong>
-  <small>${e?.completed?'Aula concluída · ':''}${e?.diagnostic?`Diagnóstico: ${ratingText(e.diagnostic)} · `:''}${origin(e?.lessonOrigin??'nenhum')}</small>
-  <div class="inline-actions">${bundle.lessons[t.id]?`<a class="btn" href="${base}/aula/${li}">Ler aula</a>`:''}
-  ${bundle.diagnostic.some(c=>c.subtopicId===t.id)?`<a class="btn" href="${base}/diagnostico/${di}">Diagnóstico</a>`:''}</div></div>`;}).join('')}</div></section>`;
+ const subjectId=bundle.subjectId;
+ const validRatings=new Set(['sei','duvida','nao']);
+ const answered=bundle.diagnostic.filter(c=>validRatings.has(view.score?.subtopics?.[c.subtopicId]?.diagnostic)).length;
+ const nextCard=bundle.diagnostic.findIndex(c=>!validRatings.has(view.score?.subtopics?.[c.subtopicId]?.diagnostic));
+ const diagnosticPage=nextCard<0?1:nextCard+1;
+ const lessons=bundle.subtopics.filter(t=>bundle.lessons[t.id]);
+ const studied=lessons.filter(t=>view.score?.subtopics?.[t.id]?.completed===true).length;
+ const exercise=view.score?.liveExercise;
+ const bank=view.score?.liveBank;
+ const primary=subjectId==='administracao'
+  ? `<div class="shared-module-primary-actions">
+     ${bundle.diagnostic.length?`<a class="shared-module-action" href="${base}/diagnostico/${diagnosticPage}"><strong>Diagnóstico</strong><small>${answered}/${bundle.diagnostic.length} cartões avaliados · ${answered===bundle.diagnostic.length?'Rever respostas':'Continuar avaliação'}</small></a>`:''}
+     <a class="shared-module-action" href="${base}/exercicios"><strong>Exercícios de aprendizagem</strong><small>${exercise?`${exercise.answered}/${exercise.total} respondidos`:'Praticar o que aprendi'}</small></a>
+     <a class="shared-module-action" href="#treino-admin/banco/${esc(bundle.moduleId)}/1"><strong>Banco de questões</strong><small>${bank?`${bank.answered} questões respondidas no treino`:'Praticar questões do módulo'}</small></a>
+     </div>`
+  : `<div class="shared-module-primary-actions">
+     ${bundle.diagnostic.length?`<a class="shared-module-action" href="${base}/diagnostico/${diagnosticPage}"><strong>Diagnóstico</strong><small>${answered}/${bundle.diagnostic.length} cartões avaliados</small></a>`:''}
+     <span class="shared-module-action shared-module-disabled"><strong>Exercícios de aprendizagem</strong><small>Em preparação nesta disciplina</small></span>
+     <span class="shared-module-action shared-module-disabled"><strong>Banco de questões</strong><small>Em preparação nesta disciplina</small></span>
+     </div>`;
+ const topicRows=bundle.subtopics.map((t,i)=>{
+  const lessonIndex=lessons.findIndex(x=>x.id===t.id)+1;
+  const entry=view.score?.subtopics?.[t.id];
+  const status=entry?.completed?'✓ Aula concluída':entry?.lessonRating?'Autoavaliação registrada':'Aula pendente';
+  if(!lessonIndex)return `<li class="shared-topic-unavailable"><span>${i+1}. ${esc(t.title)}</span><small>Aula em preparação</small></li>`;
+  return `<li><a class="shared-topic-link" href="${base}/aula/${lessonIndex}" aria-label="Abrir aula: ${esc(t.title)}">
+   <span class="shared-topic-main"><span class="shared-topic-number">${i+1}.</span><span><strong>${esc(t.title)}</strong><small>${status}</small></span></span>
+   <span class="shared-topic-arrow" aria-hidden="true">›</span></a></li>`;
+ }).join('');
+ const tools=subjectId==='administracao'?`<details class="shared-module-extra"><summary>Outras ferramentas e informações</summary>
+  <nav class="inline-actions" aria-label="Ferramentas complementares do módulo">
+  <a class="btn" href="#treino-admin/revisao">Revisão</a><a class="btn" href="#treino-admin/simulado">Simulados</a>
+  <a class="btn" href="#treino-admin/estatisticas">Estatísticas</a><a class="btn" href="#treino-admin/modulo/${esc(bundle.moduleId)}">Histórico anterior</a>
+  <a class="btn" href="#materia/administracao/legado">Abrir ADM-ESTUDO original</a></nav>
+  <p class="small muted">Módulo ${esc(bundle.moduleId)} · ${bundle.subtopics.length} subtópicos · ${bundle.questionCount??0} questões no catálogo.</p>
+  </details>`:'';
+ return `<section class="panel shared-module-stages"><h2>Atividades do módulo</h2>
+ <p class="muted">O diagnóstico avalia o módulo inteiro. Exercícios e Banco de Questões também ficam aqui, sem repetição nos subtópicos.</p>
+ ${primary}</section>
+ <section class="panel shared-module-lessons"><h2>Aulas por subtópico</h2>
+ <p class="muted">${studied}/${lessons.length} aulas concluídas · Selecione o assunto para abrir a aula.</p>
+ <ol class="shared-topic-list">${topicRows}</ol></section>
+ ${tools}`;
 }
 function progressNotice(view,subjectId){
  if(subjectId!=='administracao')return '<p class="notice">Aulas e diagnósticos desta disciplina continuam <strong>somente leitura</strong> no motor compartilhado. A gravação será ativada quando o adaptador de progresso específico estiver validado.</p>';
@@ -95,13 +133,11 @@ export async function renderSharedModule(route,main,isCurrent=()=>true,loader=lo
    screen==='aula'&&route.length===5?lessonView(bundle,Number(index),view):
    screen==='diagnostico'&&route.length===5?diagnosticView(bundle,Number(index),view):null;
  if(content===null)throw Error('Página do módulo inválida.');
- const actions=subjectId==='administracao'
-   ?`<a class="btn" href="#treino-admin/modulo/${esc(moduleId)}">Histórico herdado</a><a class="btn btn-primary" href="${base}/exercicios">Exercícios</a><a class="btn" href="#treino-admin/banco/${esc(moduleId)}/1">Banco de questões</a><a class="btn" href="#treino-admin/revisao">Revisão</a><a class="btn" href="#treino-admin/simulado">Simulados</a><a class="btn" href="#treino-admin/estatisticas">Estatísticas</a>`
-   :`<a class="btn" href="#materia/${esc(subjectId)}">Voltar à disciplina</a>`;
+ const isIndex=screen==='inicio'&&route.length===3;
  const targetMain=main;
  if(isCurrent())targetMain.innerHTML=`<div class="section-head"><div><p class="eyebrow">Motor compartilhado · Fase 8D</p><h1>${esc(bundle.moduleId)} — ${esc(bundle.title)}</h1></div>
- <a class="btn" href="${base}">← Índice do módulo</a></div>
- <div class="inline-actions">${actions}</div>${progressNotice(view,subjectId)}${content}`;
+ <a class="btn" href="${isIndex?`#materia/${esc(subjectId)}`:base}">${isIndex?'← Todos os módulos':'← Voltar ao módulo'}</a></div>
+ ${progressNotice(view,subjectId)}${content}`;
 }
 let busy=false;
 /** Recebe somente botões da rota de estudo e valida página + subtópico no bundle. */

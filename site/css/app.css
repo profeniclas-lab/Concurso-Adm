@@ -64,3 +64,26 @@ html[data-theme="dark"]{color-scheme:dark;--bg:#121927;--surface:#1b2434;--surfa
 .shared-achievement p{overflow-wrap:anywhere}
 .training-answers .choice:disabled{opacity:.92}
 @media(max-width:600px){.shared-exercise-track{margin-bottom:14px}.training-answers .choice{padding:13px;min-height:44px}}
+
+/* Ajuste de navegação Fase 8D: uma etapa de diagnóstico por módulo e aulas clicáveis. */
+.shared-module-primary-actions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:16px}
+.shared-module-action{display:flex;flex-direction:column;justify-content:center;gap:5px;min-height:86px;padding:15px;border:1px solid var(--line);border-radius:12px;background:var(--surface-2);color:var(--text);text-decoration:none;transition:border-color .15s,background .15s}
+.shared-module-action:hover{border-color:var(--brand);background:var(--surface)}
+.shared-module-action strong{font-size:15px;line-height:1.35}
+.shared-module-action small{color:var(--muted);font-size:12px;line-height:1.4}
+.shared-module-disabled{cursor:default;opacity:.65}
+.shared-module-disabled:hover{border-color:var(--line);background:var(--surface-2)}
+.shared-topic-list{list-style:none;padding:0;margin:14px 0 0;border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.shared-topic-list>li+li{border-top:1px solid var(--line)}
+.shared-topic-link{display:flex;justify-content:space-between;align-items:center;gap:14px;padding:13px 16px;color:var(--text);background:var(--surface);text-decoration:none}
+.shared-topic-link:hover{background:var(--surface-2)}
+.shared-topic-main{display:flex;align-items:center;gap:12px;min-width:0}
+.shared-topic-main strong{display:block;font-weight:650;line-height:1.4}
+.shared-topic-main small{display:block;font-size:12px;color:var(--muted);margin-top:2px}
+.shared-topic-number{font-weight:700;min-width:24px;color:var(--muted)}
+.shared-topic-arrow{color:var(--muted);font-size:25px;line-height:1}
+.shared-topic-unavailable{display:flex;justify-content:space-between;gap:12px;padding:13px 16px;color:var(--muted)}
+.shared-module-extra{margin:16px 0;padding:13px 17px;border:1px solid var(--line);border-radius:12px;background:var(--surface)}
+.shared-module-extra summary{cursor:pointer;font-weight:650}
+.shared-module-extra summary:hover{color:var(--accent)}
+@media (max-width:700px){.shared-module-primary-actions{grid-template-columns:1fr}.shared-module-action{min-height:62px}}

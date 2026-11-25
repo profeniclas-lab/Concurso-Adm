@@ -70,7 +70,8 @@ test('renderização do índice é informativa e não grava armazenamento',async
  const el={innerHTML:''};const copy=structuredClone(fixture());
  await renderSharedModule(['estudo','administracao','ADM-01'],el,()=>true,async()=>copy);
  assert.match(el.innerHTML,/Fundamentos de Administração/);
- assert.match(el.innerHTML,/Ler aula/);
+ assert.match(el.innerHTML,/Aulas por subtópico/);
+ assert.doesNotMatch(el.innerHTML,/>Ler aula<\/a>/);
  assert.match(el.innerHTML,/Diagnóstico/);
  assert.match(el.innerHTML,/Aproveitamento do módulo/);
  assert.equal(writes,0);assert.deepEqual(copy,fixture());delete globalThis.localStorage;
@@ -79,7 +80,7 @@ test('renderização de aula mostra objetivo, resumo e pergunta sem alterar cont
  const el={innerHTML:''};
  await renderSharedModule(['estudo','administracao','ADM-01','aula','1'],el,()=>true,async()=>fixture());
  assert.match(el.innerHTML,/Uma explicação/);assert.match(el.innerHTML,/Recuperação ativa/);
- assert.match(el.innerHTML,/Próxima aula/);assert.match(el.innerHTML,/treino-admin\/banco\/ADM-01/);
+ assert.match(el.innerHTML,/Próxima aula/);assert.match(el.innerHTML,/Voltar ao módulo/);
 });
 test('renderização de diagnóstico mantém a resposta em details',async()=>{
  const el={innerHTML:''};
